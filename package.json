@@ -26,7 +26,9 @@
     "export:runs": "node scripts/export-runs.mjs",
     "bench": "node benchmark/bench.mjs",
     "quality": "node quality/check.mjs .",
-    "eval": "node eval/eval.mjs"
+    "eval": "node eval/eval.mjs",
+    "deploy": "node deploy.mjs",
+    "knowledge": "python3 graphify-out/build-site.py"
   },
   "devDependencies": {
     "@eslint/js": "^9.12.0",

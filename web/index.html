@@ -6,6 +6,19 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>LUMINA</title>
     <meta name="description" content="Ask a question, get a cited answer from the live web and your own documents." />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('lumina.theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

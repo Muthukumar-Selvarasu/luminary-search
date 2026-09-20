@@ -1,0 +1,50 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build artifacts
+dist/
+build/
+web/dist/
+*.tsbuildinfo
+
+# Run execution logs & reports (PRD / AGENTS.md hygiene)
+runs/*.json
+runs/*/*.json
+reports/*.json
+reports/*
+
+# Downloads & temporary uploads
+downloads/
+uploads/
+tmp/
+temp/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# System and Editor files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+graphify-out/.graphify_python
+graphify-out/.graphify_root

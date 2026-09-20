@@ -1,0 +1,31 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "web/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "https://gateway-production-9ac0.up.railway.app/health"
+    },
+    {
+      "source": "/stats",
+      "destination": "https://gateway-production-9ac0.up.railway.app/stats"
+    },
+    {
+      "source": "/threads/:match*",
+      "destination": "https://gateway-production-9ac0.up.railway.app/threads/:match*"
+    },
+    {
+      "source": "/spaces/:match*",
+      "destination": "https://gateway-production-9ac0.up.railway.app/spaces/:match*"
+    },
+    {
+      "source": "/memory/:match*",
+      "destination": "https://gateway-production-9ac0.up.railway.app/memory/:match*"
+    },
+    {
+      "source": "/((?!assets/|knowledge/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

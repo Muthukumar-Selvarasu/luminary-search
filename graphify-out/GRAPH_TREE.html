@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LUMINA — graphify tree viewer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f9f9f9;
+      color: #333;
+    }
+    h1 {
+      margin: 20px 0 0 24px;
+      font-size: 2.2rem;
+      font-weight: bold;
+      color: #1e3a56;
+    }
+    .controls {
+      margin: 20px 0 15px 24px;
+    }
+    button {
+      margin-right: 10px;
+      padding: 8px 18px;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s ease-in-out;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:active {
+      background: #004085;
+    }
+    #tree-container {
+      width: calc(100vw - 48px); /* Adjust for body margin/padding */
+      height: 85vh;
+      overflow: auto;
+      border-radius: 8px;
+      background: #fff;
+      margin-left: 24px;
+      margin-right: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      border: 1px solid #ddd;
+    }
+    svg {
+      background: #fff;
+      border-radius: 8px;
+      display: block; /* Important for D3 */
+    }
+    .node circle {
+      stroke-width: 2.5px;
+    }
+    .node text { /* Base style for the <text> container */
+      font: 13px 'Segoe UI', sans-serif;
+      paint-order: stroke fill; /* Ensures text is readable over lines */
+      stroke: #fff; /* White halo */
+      stroke-width: 3px; /* Halo thickness */
+      stroke-linejoin: round;
+      stroke-opacity: 0.85; /* Halo opacity */
+    }
+    .link {
+      fill: none;
+      stroke-opacity: 0.7;
+      stroke-width: 2px;
+    }
+  </style>
+</head>
+<body>
+  <h1>LUMINA — Knowledge Graph</h1>
+  <div class="controls">
+    <button onclick="expandAll()">Expand All</button>
+    <button onclick="collapseAll()">Collapse All</button>
+    <button onclick="resetView()">Reset View</button>
+  </div>
+  <div id="tree-container">
+    <svg id="tree-svg" width="6000" height="8000"></svg>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    const initialJsonData = {"name":"LUMINA","total_count":618,"children":[{"name":"backend","total_count":206,"children":[{"name":"agent","total_count":152,"children":[{"name":"package.json","total_count":49,"children":[{"name":"@lumina/contract","total_count":1,"children":[]},{"name":"@lumina/contract","total_count":1,"children":[]},{"name":"@mozilla/readability","total_count":1,"children":[]},{"name":"@mozilla/readability","total_count":1,"children":[]},{"name":"@types/express","total_count":1,"children":[]},{"name":"@types/express","total_count":1,"children":[]},{"name":"@types/jsdom","total_count":1,"children":[]},{"name":"@types/jsdom","total_count":1,"children":[]},{"name":"@types/multer","total_count":1,"children":[]},{"name":"@types/multer","total_count":1,"children":[]},{"name":"@types/node","total_count":1,"children":[]},{"name":"@types/node","total_count":1,"children":[]},{"name":"_note","total_count":1,"children":[]},{"name":"build","total_count":1,"children":[]},{"name":"dependencies","total_count":1,"children":[]},{"name":"description","total_count":1,"children":[]},{"name":"dev","total_count":1,"children":[]},{"name":"devDependencies","total_count":1,"children":[]},{"name":"dotenv","total_count":1,"children":[]},{"name":"dotenv","total_count":1,"children":[]},{"name":"express","total_count":1,"children":[]},{"name":"express","total_count":1,"children":[]},{"name":"jsdom","total_count":1,"children":[]},{"name":"jsdom","total_count":1,"children":[]},{"name":"main","total_count":1,"children":[]},{"name":"mongodb","total_count":1,"children":[]},{"name":"mongodb","total_count":1,"children":[]},{"name":"multer","total_count":1,"children":[]},{"name":"multer","total_count":1,"children":[]},{"name":"name","total_count":1,"children":[]},{"name":"openai","total_count":1,"children":[]},{"name":"openai","total_count":1,"children":[]},{"name":"pdfjs-dist","total_count":1,"children":[]},{"name":"pdfjs-dist","total_count":1,"children":[]},{"name":"pino","total_count":1,"children":[]},{"name":"pino","total_count":1,"children":[]},{"name":"private","total_count":1,"children":[]},{"name":"scripts","total_count":1,"children":[]},{"name":"start","total_count":1,"children":[]},{"name":"tsx","total_count":1,"children":[]},{"name":"tsx","total_count":1,"children":[]},{"name":"type","total_count":1,"children":[]},{"name":"typecheck","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"version","total_count":1,"children":[]},{"name":"worker","total_count":1,"children":[]},{"name":"zod","total_count":1,"children":[]},{"name":"zod","total_count":1,"children":[]}]},{"name":"src","total_count":96,"children":[{"name":"agent.ts","total_count":7,"children":[{"name":"clampPlan()","total_count":1,"children":[]},{"name":"defaultPlan()","total_count":1,"children":[]},{"name":"executeAsk()","total_count":1,"children":[]},{"name":"ExecuteAskParams","total_count":1,"children":[]},{"name":"hitCap()","total_count":1,"children":[]},{"name":"log","total_count":1,"children":[]},{"name":"RetrievedPassage","total_count":1,"children":[]}]},{"name":"db.ts","total_count":2,"children":[{"name":"db()","total_count":1,"children":[]},{"name":"pingDb()","total_count":1,"children":[]}]},{"name":"env.ts","total_count":4,"children":[{"name":"env","total_count":1,"children":[]},{"name":"here","total_count":1,"children":[]},{"name":"num()","total_count":1,"children":[]},{"name":"secrets","total_count":1,"children":[]}]},{"name":"index.ts","total_count":9,"children":[{"name":"app","total_count":1,"children":[]},{"name":"handleMemoryDelete()","total_count":1,"children":[]},{"name":"implementedRoutes","total_count":1,"children":[]},{"name":"log","total_count":1,"children":[]},{"name":"notImplemented()","total_count":1,"children":[]},{"name":"persistUploadedDocument()","total_count":1,"children":[]},{"name":"spaceCache","total_count":1,"children":[]},{"name":"threadCache","total_count":1,"children":[]},{"name":"upload","total_count":1,"children":[]}]},{"name":"llm","total_count":7,"children":[{"name":"client.ts","total_count":7,"children":[{"name":"ChatMessage","total_count":1,"children":[]},{"name":"decideNextStep()","total_count":1,"children":[]},{"name":"getAvailableTools()","total_count":1,"children":[]},{"name":"getOpenAIClient()","total_count":1,"children":[]},{"name":"StepDecision","total_count":1,"children":[]},{"name":"streamFinalAnswer()","total_count":1,"children":[]},{"name":"ToolCallDecision","total_count":1,"children":[]}]}]},{"name":"memory","total_count":6,"children":[{"name":"memoryService.ts","total_count":6,"children":[{"name":"cosineSimilarity()","total_count":1,"children":[]},{"name":"deleteMemory()","total_count":1,"children":[]},{"name":"listMemories()","total_count":1,"children":[]},{"name":"MemoryItem","total_count":1,"children":[]},{"name":"recallMemories()","total_count":1,"children":[]},{"name":"saveMemory()","total_count":1,"children":[]}]}]},{"name":"rag","total_count":17,"children":[{"name":"embeddings.ts","total_count":3,"children":[{"name":"generateEmbedding()","total_count":1,"children":[]},{"name":"generateEmbeddings()","total_count":1,"children":[]},{"name":"getOpenAI()","total_count":1,"children":[]}]},{"name":"gridfs.ts","total_count":1,"children":[{"name":"getGridFSBucket()","total_count":1,"children":[]}]},{"name":"hybridSearch.ts","total_count":6,"children":[{"name":"cosineScan()","total_count":1,"children":[]},{"name":"cosineSimilarity()","total_count":1,"children":[]},{"name":"hybridSearchDocuments()","total_count":1,"children":[]},{"name":"lexicalOverlap()","total_count":1,"children":[]},{"name":"normalizeLocator()","total_count":1,"children":[]},{"name":"RetrievedDocumentChunk","total_count":1,"children":[]}]},{"name":"parser.ts","total_count":5,"children":[{"name":"chunkText()","total_count":1,"children":[]},{"name":"ParsedChunk","total_count":1,"children":[]},{"name":"parsePdf()","total_count":1,"children":[]},{"name":"ParseResult","total_count":1,"children":[]},{"name":"parseTextOrMarkdown()","total_count":1,"children":[]}]},{"name":"parseWorker.ts","total_count":2,"children":[{"name":"ParseJob","total_count":1,"children":[]},{"name":"run()","total_count":1,"children":[]}]}]},{"name":"runs.ts","total_count":4,"children":[{"name":"computeCostUsd()","total_count":1,"children":[]},{"name":"ToolCallRecord","total_count":1,"children":[]},{"name":"writeRunLog()","total_count":1,"children":[]},{"name":"WriteRunParams","total_count":1,"children":[]}]},{"name":"sse.ts","total_count":9,"children":[{"name":".close()","total_count":1,"children":[]},{"name":".sendDone()","total_count":1,"children":[]},{"name":".sendError()","total_count":1,"children":[]},{"name":".sendPlan()","total_count":1,"children":[]},{"name":".sendSources()","total_count":1,"children":[]},{"name":".sendToken()","total_count":1,"children":[]},{"name":".sendTrace()","total_count":1,"children":[]},{"name":"initSseStream()","total_count":1,"children":[]},{"name":"SseStream","total_count":1,"children":[]}]},{"name":"tools","total_count":21,"children":[{"name":"fetchPage.ts","total_count":7,"children":[{"name":"capContent()","total_count":1,"children":[]},{"name":"extractFromHtml()","total_count":1,"children":[]},{"name":"fetchPage()","total_count":1,"children":[]},{"name":"FetchPageOutput","total_count":1,"children":[]},{"name":"pageCache","total_count":1,"children":[]},{"name":"passageSnippet()","total_count":1,"children":[]},{"name":"tavilyExtract()","total_count":1,"children":[]}]},{"name":"searchCache.ts","total_count":10,"children":[{"name":".constructor()","total_count":1,"children":[]},{"name":".get()","total_count":1,"children":[]},{"name":".set()","total_count":1,"children":[]},{"name":"CachedSearch","total_count":1,"children":[]},{"name":"computeSearchCacheKey()","total_count":1,"children":[]},{"name":"getCachedSearch()","total_count":1,"children":[]},{"name":"MemoryLRU","total_count":1,"children":[]},{"name":"normalizeQuery()","total_count":1,"children":[]},{"name":"SearchResultItem","total_count":1,"children":[]},{"name":"setCachedSearch()","total_count":1,"children":[]}]},{"name":"webSearch.ts","total_count":4,"children":[{"name":"isTimeSensitiveQuery()","total_count":1,"children":[]},{"name":"webSearch()","total_count":1,"children":[]},{"name":"WebSearchHit","total_count":1,"children":[]},{"name":"WebSearchOutput","total_count":1,"children":[]}]}]},{"name":"worker.ts","total_count":10,"children":[{"name":"here","total_count":1,"children":[]},{"name":"log","total_count":1,"children":[]},{"name":"parseDocument()","total_count":1,"children":[]},{"name":"parseInThread()","total_count":1,"children":[]},{"name":"parseWorkerFile","total_count":1,"children":[]},{"name":"probeVectorIndex()","total_count":1,"children":[]},{"name":"processJob()","total_count":1,"children":[]},{"name":"startWorker()","total_count":1,"children":[]},{"name":"stopWorker()","total_count":1,"children":[]},{"name":"sweepStaleJobs()","total_count":1,"children":[]}]}]},{"name":"tsconfig.json","total_count":7,"children":[{"name":"../../tsconfig.base.json","total_count":1,"children":[]},{"name":"compilerOptions","total_count":1,"children":[]},{"name":"extends","total_count":1,"children":[]},{"name":"include","total_count":1,"children":[]},{"name":"outDir","total_count":1,"children":[]},{"name":"rootDir","total_count":1,"children":[]},{"name":"types","total_count":1,"children":[]}]}]},{"name":"gateway","total_count":54,"children":[{"name":"package.json","total_count":37,"children":[{"name":"@lumina/contract","total_count":1,"children":[]},{"name":"@lumina/contract","total_count":1,"children":[]},{"name":"@types/cors","total_count":1,"children":[]},{"name":"@types/cors","total_count":1,"children":[]},{"name":"@types/express","total_count":1,"children":[]},{"name":"@types/express","total_count":1,"children":[]},{"name":"@types/node","total_count":1,"children":[]},{"name":"@types/node","total_count":1,"children":[]},{"name":"build","total_count":1,"children":[]},{"name":"cors","total_count":1,"children":[]},{"name":"cors","total_count":1,"children":[]},{"name":"dependencies","total_count":1,"children":[]},{"name":"description","total_count":1,"children":[]},{"name":"dev","total_count":1,"children":[]},{"name":"devDependencies","total_count":1,"children":[]},{"name":"dotenv","total_count":1,"children":[]},{"name":"dotenv","total_count":1,"children":[]},{"name":"express","total_count":1,"children":[]},{"name":"express","total_count":1,"children":[]},{"name":"main","total_count":1,"children":[]},{"name":"name","total_count":1,"children":[]},{"name":"pino","total_count":1,"children":[]},{"name":"pino","total_count":1,"children":[]},{"name":"pino-http","total_count":1,"children":[]},{"name":"pino-http","total_count":1,"children":[]},{"name":"private","total_count":1,"children":[]},{"name":"scripts","total_count":1,"children":[]},{"name":"start","total_count":1,"children":[]},{"name":"tsx","total_count":1,"children":[]},{"name":"tsx","total_count":1,"children":[]},{"name":"type","total_count":1,"children":[]},{"name":"typecheck","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"version","total_count":1,"children":[]},{"name":"zod","total_count":1,"children":[]},{"name":"zod","total_count":1,"children":[]}]},{"name":"src","total_count":10,"children":[{"name":"env.ts","total_count":3,"children":[{"name":"env","total_count":1,"children":[]},{"name":"here","total_count":1,"children":[]},{"name":"num()","total_count":1,"children":[]}]},{"name":"index.ts","total_count":5,"children":[{"name":"app","total_count":1,"children":[]},{"name":"log","total_count":1,"children":[]},{"name":"origin()","total_count":1,"children":[]},{"name":"proxyRestRoute()","total_count":1,"children":[]},{"name":"rateLimitMap","total_count":1,"children":[]}]},{"name":"sse.ts","total_count":2,"children":[{"name":"sseHeaders()","total_count":1,"children":[]},{"name":"sseSend()","total_count":1,"children":[]}]}]},{"name":"tsconfig.json","total_count":7,"children":[{"name":"../../tsconfig.base.json","total_count":1,"children":[]},{"name":"compilerOptions","total_count":1,"children":[]},{"name":"extends","total_count":1,"children":[]},{"name":"include","total_count":1,"children":[]},{"name":"outDir","total_count":1,"children":[]},{"name":"rootDir","total_count":1,"children":[]},{"name":"types","total_count":1,"children":[]}]}]}]},{"name":"benchmark","total_count":56,"children":[{"name":"bench.mjs","total_count":41,"children":[{"name":"argv","total_count":1,"children":[]},{"name":"assertSla()","total_count":1,"children":[]},{"name":"buildWorkload()","total_count":1,"children":[]},{"name":"cap()","total_count":1,"children":[]},{"name":"client","total_count":1,"children":[]},{"name":"computeMetrics()","total_count":1,"children":[]},{"name":"distinctSources()","total_count":1,"children":[]},{"name":"fail()","total_count":1,"children":[]},{"name":"fetchPageText()","total_count":1,"children":[]},{"name":"goldCorpusFiles()","total_count":1,"children":[]},{"name":"has()","total_count":1,"children":[]},{"name":"HERE","total_count":1,"children":[]},{"name":"hr()","total_count":1,"children":[]},{"name":"jsonOut","total_count":1,"children":[]},{"name":"locatorKey()","total_count":1,"children":[]},{"name":"M","total_count":1,"children":[]},{"name":"metrics","total_count":1,"children":[]},{"name":"MIME","total_count":1,"children":[]},{"name":"pageCache","total_count":1,"children":[]},{"name":"preflight()","total_count":1,"children":[]},{"name":"probeDeepCap()","total_count":1,"children":[]},{"name":"queries","total_count":1,"children":[]},{"name":"report","total_count":1,"children":[]},{"name":"ROOT","total_count":1,"children":[]},{"name":"runDeepSearch()","total_count":1,"children":[]},{"name":"runIngestDecoupling()","total_count":1,"children":[]},{"name":"runMemory()","total_count":1,"children":[]},{"name":"runRag()","total_count":1,"children":[]},{"name":"runStats()","total_count":1,"children":[]},{"name":"runWebWorkload()","total_count":1,"children":[]},{"name":"say()","total_count":1,"children":[]},{"name":"scoreDeep()","total_count":1,"children":[]},{"name":"scoreGrounding()","total_count":1,"children":[]},{"name":"sla","total_count":1,"children":[]},{"name":"slaRows","total_count":1,"children":[]},{"name":"SMOKE","total_count":1,"children":[]},{"name":"stripHtml()","total_count":1,"children":[]},{"name":"target","total_count":1,"children":[]},{"name":"uploadAndWait()","total_count":1,"children":[]},{"name":"userId","total_count":1,"children":[]},{"name":"val()","total_count":1,"children":[]}]},{"name":"lib.mjs","total_count":15,"children":[{"name":".constructor()","total_count":1,"children":[]},{"name":"ask()","total_count":1,"children":[]},{"name":"citationNumbers()","total_count":1,"children":[]},{"name":"costOf()","total_count":1,"children":[]},{"name":"HttpError","total_count":1,"children":[]},{"name":"makeClient()","total_count":1,"children":[]},{"name":"makePdf()","total_count":1,"children":[]},{"name":"mean()","total_count":1,"children":[]},{"name":"normalize()","total_count":1,"children":[]},{"name":"percentile()","total_count":1,"children":[]},{"name":"pool()","total_count":1,"children":[]},{"name":"round()","total_count":1,"children":[]},{"name":"sha256()","total_count":1,"children":[]},{"name":"sleep()","total_count":1,"children":[]},{"name":"snippetIsGrounded()","total_count":1,"children":[]}]}]},{"name":"deploy.mjs","total_count":9,"children":[{"name":"fail()","total_count":1,"children":[]},{"name":"hr()","total_count":1,"children":[]},{"name":"RAILWAY_TOKEN","total_count":1,"children":[]},{"name":"railwayEnv","total_count":1,"children":[]},{"name":"run()","total_count":1,"children":[]},{"name":"runCapture()","total_count":1,"children":[]},{"name":"VERCEL_ORG_ID","total_count":1,"children":[]},{"name":"VERCEL_PROJECT_ID","total_count":1,"children":[]},{"name":"VERCEL_TOKEN","total_count":1,"children":[]}]},{"name":"eval","total_count":53,"children":[{"name":"build-report.mjs","total_count":23,"children":[{"name":"argv","total_count":1,"children":[]},{"name":"automated","total_count":1,"children":[]},{"name":"bench","total_count":1,"children":[]},{"name":"brokenRedLines","total_count":1,"children":[]},{"name":"HERE","total_count":1,"children":[]},{"name":"manual","total_count":1,"children":[]},{"name":"num()","total_count":1,"children":[]},{"name":"ok()","total_count":1,"children":[]},{"name":"outPath","total_count":1,"children":[]},{"name":"pad()","total_count":1,"children":[]},{"name":"quality","total_count":1,"children":[]},{"name":"readDesign()","total_count":1,"children":[]},{"name":"readJson()","total_count":1,"children":[]},{"name":"readTrajectory()","total_count":1,"children":[]},{"name":"redLines","total_count":1,"children":[]},{"name":"report","total_count":1,"children":[]},{"name":"ROOT","total_count":1,"children":[]},{"name":"rubric","total_count":1,"children":[]},{"name":"SCORERS","total_count":1,"children":[]},{"name":"slaRow()","total_count":1,"children":[]},{"name":"ttft","total_count":1,"children":[]},{"name":"val()","total_count":1,"children":[]},{"name":"why()","total_count":1,"children":[]}]},{"name":"eval.mjs","total_count":11,"children":[{"name":"argv","total_count":1,"children":[]},{"name":"deployUrl","total_count":1,"children":[]},{"name":"finish()","total_count":1,"children":[]},{"name":"gates","total_count":1,"children":[]},{"name":"has()","total_count":1,"children":[]},{"name":"HERE","total_count":1,"children":[]},{"name":"record()","total_count":1,"children":[]},{"name":"ROOT","total_count":1,"children":[]},{"name":"run()","total_count":1,"children":[]},{"name":"tail()","total_count":1,"children":[]},{"name":"val()","total_count":1,"children":[]}]},{"name":"gold","total_count":19,"children":[{"name":"build-corpus.mjs","total_count":12,"children":[{"name":"AS_MD","total_count":1,"children":[]},{"name":"AS_PDF","total_count":1,"children":[]},{"name":"buildPdf()","total_count":1,"children":[]},{"name":"esc()","total_count":1,"children":[]},{"name":"HERE","total_count":1,"children":[]},{"name":"manifest","total_count":1,"children":[]},{"name":"OUT","total_count":1,"children":[]},{"name":"pageContent()","total_count":1,"children":[]},{"name":"paginate()","total_count":1,"children":[]},{"name":"SRC","total_count":1,"children":[]},{"name":"toLines()","total_count":1,"children":[]},{"name":"wrap()","total_count":1,"children":[]}]},{"name":"validate-gold.mjs","total_count":7,"children":[{"name":"byDoc","total_count":1,"children":[]},{"name":"HERE","total_count":1,"children":[]},{"name":"items","total_count":1,"children":[]},{"name":"manifest","total_count":1,"children":[]},{"name":"norm()","total_count":1,"children":[]},{"name":"problems","total_count":1,"children":[]},{"name":"seen","total_count":1,"children":[]}]}]}]},{"name":"package.json","total_count":34,"children":[{"name":"@eslint/js","total_count":1,"children":[]},{"name":"@eslint/js","total_count":1,"children":[]},{"name":"bench","total_count":1,"children":[]},{"name":"build","total_count":1,"children":[]},{"name":"concurrently","total_count":1,"children":[]},{"name":"concurrently","total_count":1,"children":[]},{"name":"deploy","total_count":1,"children":[]},{"name":"description","total_count":1,"children":[]},{"name":"dev","total_count":1,"children":[]},{"name":"dev:agent","total_count":1,"children":[]},{"name":"dev:gateway","total_count":1,"children":[]},{"name":"dev:web","total_count":1,"children":[]},{"name":"devDependencies","total_count":1,"children":[]},{"name":"engines","total_count":1,"children":[]},{"name":"eslint","total_count":1,"children":[]},{"name":"eslint","total_count":1,"children":[]},{"name":"eval","total_count":1,"children":[]},{"name":"export:runs","total_count":1,"children":[]},{"name":"indexes","total_count":1,"children":[]},{"name":"lint","total_count":1,"children":[]},{"name":"name","total_count":1,"children":[]},{"name":"node","total_count":1,"children":[]},{"name":"private","total_count":1,"children":[]},{"name":"quality","total_count":1,"children":[]},{"name":"scripts","total_count":1,"children":[]},{"name":"type","total_count":1,"children":[]},{"name":"typecheck","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"typescript-eslint","total_count":1,"children":[]},{"name":"typescript-eslint","total_count":1,"children":[]},{"name":"version","total_count":1,"children":[]},{"name":"worker","total_count":1,"children":[]},{"name":"workspaces","total_count":1,"children":[]}]},{"name":"packages","total_count":111,"children":[{"name":"contract","total_count":111,"children":[{"name":"package.json","total_count":19,"children":[{"name":"build","total_count":1,"children":[]},{"name":"dependencies","total_count":1,"children":[]},{"name":"description","total_count":1,"children":[]},{"name":"dev","total_count":1,"children":[]},{"name":"devDependencies","total_count":1,"children":[]},{"name":"exports","total_count":1,"children":[]},{"name":"files","total_count":1,"children":[]},{"name":"main","total_count":1,"children":[]},{"name":"name","total_count":1,"children":[]},{"name":"private","total_count":1,"children":[]},{"name":"scripts","total_count":1,"children":[]},{"name":"type","total_count":1,"children":[]},{"name":"typecheck","total_count":1,"children":[]},{"name":"types","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"version","total_count":1,"children":[]},{"name":"zod","total_count":1,"children":[]},{"name":"zod","total_count":1,"children":[]}]},{"name":"src","total_count":86,"children":[{"name":"db.ts","total_count":18,"children":[{"name":"ChunkDoc","total_count":1,"children":[]},{"name":"COLLECTIONS","total_count":1,"children":[]},{"name":"DocumentDoc","total_count":1,"children":[]},{"name":"EMBEDDING_DIMS","total_count":1,"children":[]},{"name":"GRIDFS_BUCKETS","total_count":1,"children":[]},{"name":"iso","total_count":1,"children":[]},{"name":"JobDoc","total_count":1,"children":[]},{"name":"JobKind","total_count":1,"children":[]},{"name":"JobStatus","total_count":1,"children":[]},{"name":"MemoryDoc","total_count":1,"children":[]},{"name":"MessageDoc","total_count":1,"children":[]},{"name":"RequestDoc","total_count":1,"children":[]},{"name":"RunDoc","total_count":1,"children":[]},{"name":"RunLog","total_count":1,"children":[]},{"name":"SEARCH_INDEXES","total_count":1,"children":[]},{"name":"SearchCacheDoc","total_count":1,"children":[]},{"name":"SpaceDoc","total_count":1,"children":[]},{"name":"ThreadDoc","total_count":1,"children":[]}]},{"name":"http.ts","total_count":27,"children":[{"name":"ACCEPTED_UPLOAD_TYPES","total_count":1,"children":[]},{"name":"AskBody","total_count":1,"children":[]},{"name":"AskMode","total_count":1,"children":[]},{"name":"CreateSpaceBody","total_count":1,"children":[]},{"name":"CreateSpaceResponse","total_count":1,"children":[]},{"name":"CreateThreadBody","total_count":1,"children":[]},{"name":"CreateThreadResponse","total_count":1,"children":[]},{"name":"DocStatus","total_count":1,"children":[]},{"name":"DocumentRow","total_count":1,"children":[]},{"name":"ErrorBody","total_count":1,"children":[]},{"name":"GetThreadResponse","total_count":1,"children":[]},{"name":"HealthResponse","total_count":1,"children":[]},{"name":"ListDocumentsResponse","total_count":1,"children":[]},{"name":"ListMemoryResponse","total_count":1,"children":[]},{"name":"ListSpacesResponse","total_count":1,"children":[]},{"name":"ListThreadsResponse","total_count":1,"children":[]},{"name":"MAX_UPLOAD_BYTES","total_count":1,"children":[]},{"name":"Memory","total_count":1,"children":[]},{"name":"REQUEST_HEADER","total_count":1,"children":[]},{"name":"Route","total_count":1,"children":[]},{"name":"ROUTES","total_count":1,"children":[]},{"name":"SEARCH_PROVIDERS","total_count":1,"children":[]},{"name":"StatsResponse","total_count":1,"children":[]},{"name":"ThreadMessage","total_count":1,"children":[]},{"name":"UploadDocumentResponse","total_count":1,"children":[]},{"name":"USER_HEADER","total_count":1,"children":[]},{"name":"VECTOR_BACKENDS","total_count":1,"children":[]}]},{"name":"ids.ts","total_count":10,"children":[{"name":"AnswerId","total_count":1,"children":[]},{"name":"ArtifactId","total_count":1,"children":[]},{"name":"DocId","total_count":1,"children":[]},{"name":"MemoryId","total_count":1,"children":[]},{"name":"newId()","total_count":1,"children":[]},{"name":"prefixed()","total_count":1,"children":[]},{"name":"RequestId","total_count":1,"children":[]},{"name":"SpaceId","total_count":1,"children":[]},{"name":"ThreadId","total_count":1,"children":[]},{"name":"UserId","total_count":1,"children":[]}]},{"name":"report.ts","total_count":11,"children":[{"name":"BenchReport","total_count":1,"children":[]},{"name":"DesignAnswers","total_count":1,"children":[]},{"name":"EvalsReport","total_count":1,"children":[]},{"name":"GateResult","total_count":1,"children":[]},{"name":"QualityReport","total_count":1,"children":[]},{"name":"QualityRuleResult","total_count":1,"children":[]},{"name":"RubricReport","total_count":1,"children":[]},{"name":"RubricRow","total_count":1,"children":[]},{"name":"SlaRow","total_count":1,"children":[]},{"name":"Trajectory","total_count":1,"children":[]},{"name":"TrajectoryStep","total_count":1,"children":[]}]},{"name":"sse.ts","total_count":19,"children":[{"name":"AskStreamEvent","total_count":1,"children":[]},{"name":"AskTool","total_count":1,"children":[]},{"name":"citationNumbers()","total_count":1,"children":[]},{"name":"DEEP_ONLY_TOOLS","total_count":1,"children":[]},{"name":"Depth","total_count":1,"children":[]},{"name":"DoneEvent","total_count":1,"children":[]},{"name":"Locator","total_count":1,"children":[]},{"name":"PlanEvent","total_count":1,"children":[]},{"name":"Source","total_count":1,"children":[]},{"name":"SourcesEvent","total_count":1,"children":[]},{"name":"SSE_EVENTS","total_count":1,"children":[]},{"name":"SseEventName","total_count":1,"children":[]},{"name":"StreamErrorEvent","total_count":1,"children":[]},{"name":"SubQuestion","total_count":1,"children":[]},{"name":"Terminated","total_count":1,"children":[]},{"name":"TokenEvent","total_count":1,"children":[]},{"name":"ToolName","total_count":1,"children":[]},{"name":"TraceEvent","total_count":1,"children":[]},{"name":"unresolvedCitations()","total_count":1,"children":[]}]},{"name":"index.ts","total_count":1,"children":[]}]},{"name":"tsconfig.json","total_count":6,"children":[{"name":"../../tsconfig.base.json","total_count":1,"children":[]},{"name":"compilerOptions","total_count":1,"children":[]},{"name":"extends","total_count":1,"children":[]},{"name":"include","total_count":1,"children":[]},{"name":"outDir","total_count":1,"children":[]},{"name":"rootDir","total_count":1,"children":[]}]}]}]},{"name":"quality","total_count":20,"children":[{"name":"check.mjs","total_count":20,"children":[{"name":"CHECKS","total_count":1,"children":[]},{"name":"ctx","total_count":1,"children":[]},{"name":"evalPath","total_count":1,"children":[]},{"name":"exp","total_count":1,"children":[]},{"name":"expPath","total_count":1,"children":[]},{"name":"fail()","total_count":1,"children":[]},{"name":"GLYPH","total_count":1,"children":[]},{"name":"HERE","total_count":1,"children":[]},{"name":"isNum()","total_count":1,"children":[]},{"name":"manual()","total_count":1,"children":[]},{"name":"name","total_count":1,"children":[]},{"name":"overRuns()","total_count":1,"children":[]},{"name":"pass()","total_count":1,"children":[]},{"name":"readJson()","total_count":1,"children":[]},{"name":"results","total_count":1,"children":[]},{"name":"root","total_count":1,"children":[]},{"name":"runsDir","total_count":1,"children":[]},{"name":"skip()","total_count":1,"children":[]},{"name":"toolNames()","total_count":1,"children":[]},{"name":"{ rules }","total_count":1,"children":[]}]}]},{"name":"README.md","total_count":4,"children":[{"name":"Agent Service (:8000)","total_count":1,"children":[]},{"name":"Gateway Service (:8787)","total_count":1,"children":[]},{"name":"LUMINA Architecture","total_count":1,"children":[]},{"name":"Web UI (:5173)","total_count":1,"children":[]}]},{"name":"scripts","total_count":10,"children":[{"name":"create-indexes.mjs","total_count":4,"children":[{"name":"client","total_count":1,"children":[]},{"name":"HERE","total_count":1,"children":[]},{"name":"spec","total_count":1,"children":[]},{"name":"statusOnly","total_count":1,"children":[]}]},{"name":"export-runs.mjs","total_count":6,"children":[{"name":"arg()","total_count":1,"children":[]},{"name":"client","total_count":1,"children":[]},{"name":"HERE","total_count":1,"children":[]},{"name":"limit","total_count":1,"children":[]},{"name":"outDir","total_count":1,"children":[]},{"name":"ROOT","total_count":1,"children":[]}]}]},{"name":"SPEC.md","total_count":4,"children":[{"name":"Deep Search Engine","total_count":1,"children":[]},{"name":"Semantic Memory System","total_count":1,"children":[]},{"name":"SSE Streaming Protocol","total_count":1,"children":[]},{"name":"Two-Tier Search Cache","total_count":1,"children":[]}]},{"name":"TECHNICAL.md","total_count":2,"children":[{"name":"MongoDB Atlas Vector Search","total_count":1,"children":[]},{"name":"RAG & Jobs Worker","total_count":1,"children":[]}]},{"name":"tsconfig.base.json","total_count":16,"children":[{"name":"compilerOptions","total_count":1,"children":[]},{"name":"declaration","total_count":1,"children":[]},{"name":"declarationMap","total_count":1,"children":[]},{"name":"esModuleInterop","total_count":1,"children":[]},{"name":"forceConsistentCasingInFileNames","total_count":1,"children":[]},{"name":"lib","total_count":1,"children":[]},{"name":"module","total_count":1,"children":[]},{"name":"moduleResolution","total_count":1,"children":[]},{"name":"noImplicitOverride","total_count":1,"children":[]},{"name":"noUncheckedIndexedAccess","total_count":1,"children":[]},{"name":"noUnusedLocals","total_count":1,"children":[]},{"name":"noUnusedParameters","total_count":1,"children":[]},{"name":"skipLibCheck","total_count":1,"children":[]},{"name":"sourceMap","total_count":1,"children":[]},{"name":"strict","total_count":1,"children":[]},{"name":"target","total_count":1,"children":[]}]},{"name":"vercel.json","total_count":4,"children":[{"name":"buildCommand","total_count":1,"children":[]},{"name":"framework","total_count":1,"children":[]},{"name":"outputDirectory","total_count":1,"children":[]},{"name":"rewrites","total_count":1,"children":[]}]},{"name":"web","total_count":88,"children":[{"name":"package.json","total_count":28,"children":[{"name":"@lumina/contract","total_count":1,"children":[]},{"name":"@lumina/contract","total_count":1,"children":[]},{"name":"@types/react","total_count":1,"children":[]},{"name":"@types/react","total_count":1,"children":[]},{"name":"@types/react-dom","total_count":1,"children":[]},{"name":"@types/react-dom","total_count":1,"children":[]},{"name":"@vitejs/plugin-react","total_count":1,"children":[]},{"name":"@vitejs/plugin-react","total_count":1,"children":[]},{"name":"build","total_count":1,"children":[]},{"name":"dependencies","total_count":1,"children":[]},{"name":"description","total_count":1,"children":[]},{"name":"dev","total_count":1,"children":[]},{"name":"devDependencies","total_count":1,"children":[]},{"name":"name","total_count":1,"children":[]},{"name":"preview","total_count":1,"children":[]},{"name":"private","total_count":1,"children":[]},{"name":"react","total_count":1,"children":[]},{"name":"react","total_count":1,"children":[]},{"name":"react-dom","total_count":1,"children":[]},{"name":"react-dom","total_count":1,"children":[]},{"name":"scripts","total_count":1,"children":[]},{"name":"type","total_count":1,"children":[]},{"name":"typecheck","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"version","total_count":1,"children":[]},{"name":"vite","total_count":1,"children":[]},{"name":"vite","total_count":1,"children":[]}]},{"name":"src","total_count":40,"children":[{"name":"api.ts","total_count":12,"children":[{"name":".constructor()","total_count":1,"children":[]},{"name":".notImplemented()","total_count":1,"children":[]},{"name":"api","total_count":1,"children":[]},{"name":"ApiError","total_count":1,"children":[]},{"name":"AskHandlers","total_count":1,"children":[]},{"name":"askStream()","total_count":1,"children":[]},{"name":"dispatch()","total_count":1,"children":[]},{"name":"errorMessage()","total_count":1,"children":[]},{"name":"request()","total_count":1,"children":[]},{"name":"safeJson()","total_count":1,"children":[]},{"name":"setUserId()","total_count":1,"children":[]},{"name":"userId()","total_count":1,"children":[]}]},{"name":"App.tsx","total_count":2,"children":[{"name":"App()","total_count":1,"children":[]},{"name":"UiMessage","total_count":1,"children":[]}]},{"name":"components","total_count":12,"children":[{"name":"AnswerText.tsx","total_count":1,"children":[{"name":"AnswerText()","total_count":1,"children":[]}]},{"name":"Composer.tsx","total_count":1,"children":[{"name":"Composer()","total_count":1,"children":[]}]},{"name":"MemoryPanel.tsx","total_count":1,"children":[{"name":"MemoryPanel()","total_count":1,"children":[]}]},{"name":"Notice.tsx","total_count":1,"children":[{"name":"Problem()","total_count":1,"children":[]}]},{"name":"PlanPanel.tsx","total_count":1,"children":[{"name":"PlanPanel()","total_count":1,"children":[]}]},{"name":"SourcesRail.tsx","total_count":2,"children":[{"name":"docLabel()","total_count":1,"children":[]},{"name":"SourcesRail()","total_count":1,"children":[]}]},{"name":"SpacesPanel.tsx","total_count":2,"children":[{"name":"Doc","total_count":1,"children":[]},{"name":"SpacesPanel()","total_count":1,"children":[]}]},{"name":"ThemeToggle.tsx","total_count":1,"children":[{"name":"ThemeToggle()","total_count":1,"children":[]}]},{"name":"ThreadList.tsx","total_count":1,"children":[{"name":"ThreadList()","total_count":1,"children":[]}]},{"name":"TracePanel.tsx","total_count":1,"children":[{"name":"TracePanel()","total_count":1,"children":[]}]}]},{"name":"EvalsPage.tsx","total_count":8,"children":[{"name":"embedUrl()","total_count":1,"children":[]},{"name":"EvalsPage()","total_count":1,"children":[]},{"name":"mark()","total_count":1,"children":[]},{"name":"round()","total_count":1,"children":[]},{"name":"RubricTable()","total_count":1,"children":[]},{"name":"Section()","total_count":1,"children":[]},{"name":"Shell()","total_count":1,"children":[]},{"name":"TrajectoryView()","total_count":1,"children":[]}]},{"name":"main.tsx","total_count":1,"children":[{"name":"path","total_count":1,"children":[]}]},{"name":"theme.ts","total_count":5,"children":[{"name":"applyStoredTheme()","total_count":1,"children":[]},{"name":"getTheme()","total_count":1,"children":[]},{"name":"readStored()","total_count":1,"children":[]},{"name":"setTheme()","total_count":1,"children":[]},{"name":"Theme","total_count":1,"children":[]}]}]},{"name":"tsconfig.json","total_count":16,"children":[{"name":"allowImportingTsExtensions","total_count":1,"children":[]},{"name":"compilerOptions","total_count":1,"children":[]},{"name":"include","total_count":1,"children":[]},{"name":"isolatedModules","total_count":1,"children":[]},{"name":"jsx","total_count":1,"children":[]},{"name":"lib","total_count":1,"children":[]},{"name":"module","total_count":1,"children":[]},{"name":"moduleResolution","total_count":1,"children":[]},{"name":"noEmit","total_count":1,"children":[]},{"name":"noUnusedLocals","total_count":1,"children":[]},{"name":"noUnusedParameters","total_count":1,"children":[]},{"name":"resolveJsonModule","total_count":1,"children":[]},{"name":"skipLibCheck","total_count":1,"children":[]},{"name":"strict","total_count":1,"children":[]},{"name":"target","total_count":1,"children":[]},{"name":"types","total_count":1,"children":[]}]},{"name":"vercel.json","total_count":3,"children":[{"name":"$schema","total_count":1,"children":[]},{"name":"_comment","total_count":1,"children":[]},{"name":"rewrites","total_count":1,"children":[]}]},{"name":"vite.config.ts","total_count":1,"children":[]}]},{"name":"eslint.config.mjs","total_count":1,"children":[]}]};
+
+    function transformData(jsonData) {
+        // Helper function to recursively build the children structure
+        function processNode(node, parentL1StageName) {
+            let displayName = node.name;
+            // Append total_count if it exists and is not already in the name
+            if (node.total_count !== undefined) {
+                if (!/\(Total Count: \d+\)$/.test(displayName)) {
+                    displayName += ` (Total Count: ${node.total_count})`;
+                }
+            }
+
+            const newNode = { name: displayName };
+
+            if (parentL1StageName === "Root") {
+                 newNode.originalStageName = node.name;
+            } else {
+                newNode.originalStageName = parentL1StageName;
+            }
+
+            if (node.children && node.children.length > 0) {
+                const stageNameToPass = (parentL1StageName === "Root") ? node.name : parentL1StageName;
+                newNode.children = node.children.map(child => processNode(child, stageNameToPass));
+            }
+
+            return newNode;
+        }
+
+        let rootDisplayName = jsonData.name;
+        if (jsonData.total_count !== undefined && !/\(Total Count: \d+\)$/.test(rootDisplayName)) {
+            rootDisplayName += ` (Total Count: ${jsonData.total_count})`;
+        }
+
+        return {
+            name: rootDisplayName,
+            originalStageName: "Root",
+            children: (jsonData.children || []).map(child => processNode(child, "Root"))
+        };
+    }
+
+    const treeData = transformData(initialJsonData);
+
+    // Auto-populated phaseColors: every depth-1 child of the root gets
+    // a stable colour from a bigger palette so all top-level dirs are
+    // distinguishable.
+    const PALETTE = [
+      ["#3498DB","#2980B9","#AED6F1"], ["#2ECC71","#27AE60","#A9DFBF"],
+      ["#E74C3C","#C0392B","#F5B7B1"], ["#9B59B6","#8E44AD","#D7BDE2"],
+      ["#F39C12","#D68910","#FAD7A0"], ["#1ABC9C","#117864","#A2D9CE"],
+      ["#34495E","#1B2631","#ABB2B9"], ["#E67E22","#BA4A00","#F5CBA7"],
+      ["#16A085","#0E6655","#A2D9CE"], ["#D35400","#A04000","#EDBB99"],
+      ["#7F8C8D","#566573","#D5DBDB"], ["#C0392B","#7B241C","#F5B7B1"],
+      ["#2E86C1","#1B4F72","#A9CCE3"], ["#28B463","#196F3D","#A9DFBF"],
+      ["#AF7AC5","#6C3483","#D2B4DE"],
+    ];
+    const phaseColors = { "Root": { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+                          "Default": { fill: "#BDC3C7", stroke: "#95A5A6", collapsedFill: "#ECF0F1" } };
+    (initialJsonData.children || []).forEach((c, i) => {
+      const pal = PALETTE[i % PALETTE.length];
+      phaseColors[c.name] = { fill: pal[0], stroke: pal[1], collapsedFill: pal[2] };
+    });
+
+    const levelSpecificPalettes = {
+      0: { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+      2: { fill: "#6ab04c", stroke: "#508a38", collapsedFill: "#a3d391" },
+      3: { fill: "#f0932b", stroke: "#d0730f", collapsedFill: "#f6c07e" },
+      4: { fill: "#be2edd", stroke: "#a01cb3", collapsedFill: "#e08bf2" },
+      5: { fill: "#00a8ff", stroke: "#007ac1", collapsedFill: "#74d2ff" },
+      6: { fill: "#e55039", stroke: "#c23620", collapsedFill: "#f09a8d" },
+      default: { fill: "#747d8c", stroke: "#57606f", collapsedFill: "#a4b0be" }
+    };
+
+    const svgElement = d3.select("#tree-svg");
+    const initialSvgWidth = +svgElement.attr("width");
+    const initialSvgHeight = +svgElement.attr("height");
+    const margin = { top: 40, right: 120, bottom: 80, left: 450 };
+    let width = initialSvgWidth - margin.left - margin.right;
+    let height = initialSvgHeight - margin.top - margin.bottom;
+    const duration = 500;
+    let nodeCounter = 0;
+    const g = svgElement.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const treemap = d3.tree().nodeSize([40, 0]);
+    let rootNode = d3.hierarchy(treeData, d => d.children);
+    rootNode.x0 = 0;
+    rootNode.y0 = 0;
+
+    if (rootNode.children) {
+      rootNode.children.forEach(d_child => {
+        if (d_child.children) { collapseBranch(d_child); }
+      });
+    }
+    updateTree(rootNode);
+
+    function collapseBranch(d) { if (d.children) { d._children = d.children; d._children.forEach(collapseBranch); d.children = null; } }
+    function expandBranch(d) { if (d._children) { d.children = d._children; d._children = null; } if (d.children) { d.children.forEach(expandBranch); } }
+    window.expandAll = () => { expandBranch(rootNode); updateTree(rootNode); };
+    window.collapseAll = () => { if (rootNode.children) { rootNode.children.forEach(collapseBranch); } updateTree(rootNode); };
+    window.resetView = () => { if (rootNode.children) { rootNode.children.forEach(d_child => { if (d_child.children || d_child._children) { collapseBranch(d_child); } }); } if (rootNode._children && !rootNode.children) { rootNode.children = rootNode._children; rootNode._children = null; } updateTree(rootNode); };
+
+    function updateTree(source) {
+      const treeLayoutData = treemap(rootNode);
+      let nodes = treeLayoutData.descendants();
+      let links = treeLayoutData.descendants().slice(1);
+
+      let minX = 0;
+      let maxX = 0;
+      if (nodes.length > 0) {
+        minX = d3.min(nodes, d => d.x);
+        maxX = d3.max(nodes, d => d.x);
+      }
+
+      let neededHeight = Math.max(initialSvgHeight, maxX - minX + margin.top + margin.bottom + 100);
+      svgElement.transition().duration(duration / 2).attr("height", neededHeight);
+      g.transition().duration(duration / 2).attr("transform", `translate(${margin.left},${margin.top - minX + 40})`);
+
+      nodes.forEach(d => { d.y = d.depth * 400; }); // Adjust horizontal separation if needed
+
+      const node = g.selectAll('g.node').data(nodes, d => d.id || (d.id = ++nodeCounter));
+      const nodeEnter = node.enter().append('g')
+        .attr('class', d => "node" + (d.children || d._children ? " node--internal" : " node--leaf") + (d._children ? " _children" : ""))
+        .attr('transform', d => `translate(${source.y0},${source.x0})`)
+        .on('click', (event, d) => { if (d.children) { d._children = d.children; d.children = null; } else if (d._children) { d.children = d._children; d._children = null; } updateTree(d); })
+        .style('cursor', d => (d.children || d._children) ? 'pointer' : 'default');
+
+      nodeEnter.append('circle').attr('r', 1e-6);
+
+      nodeEnter.append('text')
+        .attr('dy', '.35em')
+        .attr('x', d => d.children || d._children ? -14 : 14)
+        .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+        .style("fill-opacity", 1e-6)
+        .call(wrapText, 380);
+
+      const nodeUpdate = nodeEnter.merge(node);
+      nodeUpdate.transition().duration(duration)
+        .attr('transform', d => `translate(${d.y},${d.x})`)
+        .attr('class', d => "node" + (d.children ? " node--internal" : " node--leaf") + (d._children ? " node--internal _children" : ""));
+
+      nodeUpdate.select('circle').attr('r', 8.5)
+        .style('fill', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            if (d._children) return palette.collapsedFill;
+            if (d.children) return palette.fill;
+            return "#fff";
+        })
+        .style('stroke', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            return palette.stroke;
+        });
+      nodeUpdate.select('text').style("fill-opacity", 1).call(wrapText, 380);
+
+      const nodeExit = node.exit().transition().duration(duration).attr('transform', d => `translate(${source.y},${source.x})`).remove();
+      nodeExit.select('circle').attr('r', 1e-6);
+      nodeExit.select('text').style('fill-opacity', 1e-6);
+
+      const link = g.selectAll('path.link').data(links, d => d.id);
+      const linkEnter = link.enter().insert('path', "g").attr('class', 'link').attr('d', d => { const o = { x: source.x0, y: source.y0 }; return diagonal(o, o); });
+
+      linkEnter.merge(link).transition().duration(duration).attr('d', d => diagonal(d, d.parent))
+        .style('stroke', d => {
+            const sourceNode = d.parent;
+            if (!sourceNode) return phaseColors.Default.stroke;
+            const l1AncestorName = sourceNode.data.originalStageName;
+            const colorPalette = phaseColors[l1AncestorName] || phaseColors.Default;
+            return colorPalette.stroke;
+        });
+      link.exit().transition().duration(duration).attr('d', d => { const o = { x: source.x, y: source.y }; return diagonal(o, o); }).remove();
+      nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+    }
+
+    function diagonal(s, d) { return `M ${s.y} ${s.x} C ${(s.y + d.y) / 2} ${s.x}, ${(s.y + d.y) / 2} ${d.x}, ${d.y} ${d.x}`; }
+
+    function wrapText(textElements, maxWidth) {
+        const textPartColors = {
+            name: '#343a40',
+            count: '#0056b3'
+        };
+        const countRegex = /(\s\(Total Count: \d+\))$/;
+
+        textElements.each(function () {
+            const textD3 = d3.select(this);
+            const originalNodeText = textD3.datum().data.name;
+            const x = parseFloat(textD3.attr("x") || 0);
+            const initialDy = textD3.attr("dy");
+            const textAnchor = textD3.attr("text-anchor");
+            const lineHeight = 1.1;
+
+            textD3.text(null);
+
+            let namePart = originalNodeText;
+            let countPartText = "";
+
+            const countMatch = originalNodeText.match(countRegex);
+            if (countMatch && originalNodeText.endsWith(countMatch[0])) {
+                namePart = originalNodeText.substring(0, originalNodeText.length - countMatch[0].length).trim();
+                countPartText = countMatch[0].trim();
+            }
+
+            const tokens = [];
+            namePart.split(/\s+/).filter(Boolean).forEach(word => {
+                tokens.push({ text: word, type: 'name' });
+            });
+            if (countPartText) {
+                tokens.push({ text: countPartText, type: 'count' });
+            }
+
+            if (tokens.length === 0 && originalNodeText) {
+                tokens.push({ text: originalNodeText, type: 'name' });
+            }
+
+            let currentTspan = textD3.append("tspan").attr("x", x).attr("dy", initialDy);
+            if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+
+            let lineTokens = [];
+
+            for (let i = 0; i < tokens.length; i++) {
+                const tokenObj = tokens[i];
+
+                lineTokens.push(tokenObj);
+                currentTspan.text(lineTokens.map(t => t.text).join(" "));
+
+                if (currentTspan.node().getComputedTextLength() > maxWidth && lineTokens.length > 1) {
+                    lineTokens.pop();
+
+                    currentTspan.text(null);
+                    lineTokens.forEach((prevToken, idx) => {
+                        currentTspan.append("tspan")
+                            .text((idx > 0 ? " " : "") + prevToken.text)
+                            .style("fill", textPartColors[prevToken.type] || textPartColors.name)
+                            .style("font-weight", prevToken.type === 'count' ? "bold" : "normal");
+                    });
+
+                    lineTokens = [tokenObj];
+                    currentTspan = textD3.append("tspan").attr("x", x).attr("dy", lineHeight + "em");
+                    if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+                }
+            }
+
+            currentTspan.text(null);
+            lineTokens.forEach((token, idx) => {
+                currentTspan.append("tspan")
+                    .text((idx > 0 ? " " : "") + token.text)
+                    .style("fill", textPartColors[token.type] || textPartColors.name)
+                    .style("font-weight", token.type === 'count' ? "bold" : "normal");
+            });
+
+            if (textD3.selectAll("tspan > tspan").empty() && textD3.select("tspan").text().length === 0 && originalNodeText) {
+                let t = textD3.select("tspan");
+                let displayText = originalNodeText;
+                t.text(displayText).style("fill", textPartColors.name);
+                if (t.node() && t.node().getComputedTextLength() > maxWidth && displayText.length > 20) {
+                    let estimatedChars = Math.floor(maxWidth / (t.node().getComputedTextLength()/displayText.length) );
+                    displayText = displayText.substring(0, Math.max(0, estimatedChars - 3)) + "...";
+                    t.text(displayText);
+                }
+            }
+        });
+    }
+  </script>
+</body>
+</html>

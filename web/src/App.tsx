@@ -10,6 +10,8 @@ import { MemoryPanel } from './components/MemoryPanel';
 import { SpacesPanel } from './components/SpacesPanel';
 import { PlanPanel } from './components/PlanPanel';
 import { Problem } from './components/Notice';
+import { ThemeToggle } from './components/ThemeToggle';
+import { AppNav } from './components/AppNav';
 
 type UiMessage = {
   role: 'user' | 'assistant';
@@ -176,12 +178,8 @@ export function App({ route }: { route: 'app' | 'evals' }) {
         <div className="brand">
           LUM<span>INA</span>
         </div>
-        <nav>
-          <a href="/" className="on">
-            Ask
-          </a>
-          <a href="/evals">Evals</a>
-        </nav>
+        <AppNav active="ask" />
+        <ThemeToggle />
         <span className="spacer" />
         <div className="userbox">
           <label htmlFor="uid">X-User-Id</label>

@@ -1,0 +1,516 @@
+{
+  "assignment": "Assignment 1: LUMINA",
+  "student": "Muthukumar Selvarasu",
+  "deployedAt": "2026-09-20T10:16:15.646Z",
+  "runNotes": "live https://gateway-production-9ac0.up.railway.app · gpt-4o-mini · tavily · Atlas Vector Search (free-tier cluster1)",
+  "design": {
+    "components": "LUMINA is structured as a decoupled dual-service distributed architecture deployed across edge and private network layers, backed by MongoDB Atlas:\n1. **Edge Gateway Service (`backend/gateway`)**: A stateless Express service listening on `:8787` (publicly exposed on Vercel/Edge). It handles client HTTP ingress, CORS negotiation, `X-User-Id` authentication enforcement, cryptographic `X-Request-Id` generation and propagation, sliding-window rate limiting, and zero-buffering Server-Sent Events (SSE) streaming pass-through. It also serves the production pre-built frontend SPA (`web/dist`).\n2. **Agent Engine Service (`backend/agent`)**: An internal Express application listening on `:8000` (hosted privately on Railway without public ingress). It runs the core multi-step agent reasoning loop, hosts the tool execution sandbox (`web_search`, `fetch_page`, `search_documents`, `recall_memory`, `save_memory`, and deep search `plan_research`), manages LLM provider abstractions, tracks step-level wall-clock and tool-call caps, and streams structured SSE event frames.\n3. **Document Ingestion Background Worker (`backend/agent/src/worker.ts`)**: A resilient background daemon that monitors the atomic `jobs` queue. It parses binary files from MongoDB GridFS, splits text into semantically coherent chunks annotated with granular locators (page numbers for PDF, line/heading for text), generates 1536-dimensional embeddings (`text-embedding-3-small`), writes chunks to the vector collection, and executes read-your-write vector search probes before updating document statuses.\n4. **MongoDB Atlas Datastore & Search Engine**: The unified persistence and indexing tier holding relational collections (`threads`, `messages`, `memories`, `spaces`, `documents`, `chunks`, `jobs`, `searchCache`, `requests`, `runs`) alongside GridFS binary buckets (`fs.files`, `fs.chunks`). It runs two native Atlas Vector Search indexes (`chunks_vector` for RAG and `memories_vector` for cross-session user memory) and an Atlas Full-Text Search index (`chunks_text` for BM25 retrieval).\n5. **Two-Tier Search Cache**: A hybrid caching layer consisting of an ultra-fast in-memory LRU cache inside the agent process combined with a persistent MongoDB `searchCache` collection indexed with an automatic TTL expiration (`expiresAt: 1`, `expireAfterSeconds: 0`), keyed deterministically by SHA-256 hash of `(normalized_query, provider)`.\n6. **Execution Telemetry & Run Store**: Structured run logs persisted both to disk (`runs/<requestId>.json`) and to MongoDB (`runs` collection) capturing detailed per-turn execution traces, token consumption, financial cost, tool outcomes, and termination reasons for auditing and benchmarking.",
+    "responsibilities": "Every component in LUMINA adheres to strict single-responsibility boundaries with zero ambient authority:\n- **Edge Gateway (`backend/gateway`)**: Exclusively responsible for untrusted browser communication, security policy enforcement, edge rate limiting (30 requests/minute per IP/user), user identity verification (`401 Unauthorized` on missing or malformed `X-User-Id`), request tracing headers (`X-Request-Id`), and proxying SSE streams with immediate flush (`X-Accel-Buffering: no`). **Exclusions**: The gateway is strictly forbidden from holding provider API keys (OpenAI, Anthropic, Tavily), accessing MongoDB directly, or making LLM decisions.\n- **Agent Engine (`backend/agent`)**: Exclusively responsible for holding upstream AI and search provider credentials, evaluating agent reasoning cycles, executing research tools, synthesizing citations against retrieved documents, and strictly enforcing the daily deep-search spend gate (`DEEP_DAILY_CAP=5` per `X-User-Id` returning `429 Too Many Requests` with a reset timestamp). **Exclusions**: The agent service never exposes its network port directly to the browser; all client requests must flow through the gateway.\n- **Ingestion Worker (`backend/agent/src/worker.ts`)**: Exclusively responsible for long-running CPU and network-intensive parsing (PDF extraction via `pdfjs-dist`), chunking, vector embedding generation, and polling Atlas vector index readiness. **Exclusions**: The worker never serves client HTTP traffic. Conversely, HTTP upload endpoints never perform synchronous parsing or embedding—`POST /spaces/:id/documents` writes to GridFS, queues a `pending` job, and responds with `202 Accepted` in under 300 ms.\n- **MongoDB Atlas**: Exclusively responsible for transactional document state, vector similarity search execution, full-text inverted index querying, and TTL cache invalidation.",
+    "communication": "Inter-component communication combines streaming, synchronous, and asynchronous protocols:\n- **Client ↔ Gateway**: Standard RESTful JSON over HTTP for synchronous operations (spaces management, memory CRUD, thread history) and Server-Sent Events (SSE) over HTTP for `POST /threads/:id/ask`. The gateway sets `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`, and `X-Accel-Buffering: no` to guarantee sub-second Time-To-First-Token (TTFT) without intermediate buffering.\n- **Gateway ↔ Agent Engine**: In development, direct HTTP/SSE over local loopback (`http://localhost:8000`). In cloud production, the gateway communicates with the agent service over an isolated, private virtual network (`.railway.internal`). The gateway pipes the raw SSE stream directly from the agent to the client chunk by chunk. If the agent service terminates unexpectedly or is unreachable, the gateway immediately fails loud, terminating the client response with an explicit `502 Bad Gateway` JSON envelope.\n- **Agent HTTP API ↔ Background Worker**: Fully decoupled and asynchronous via the MongoDB `jobs` collection. Jobs are claimed using atomic `findOneAndUpdate({ status: 'pending' }, { $set: { status: 'running', claimedAt: new Date() } })`. If a worker process crashes mid-job, the document remains safely stored in GridFS; a periodic crash-recovery sweeper queries jobs stuck in `running` status with stale `claimedAt` timestamps (> 5 minutes) and resets them to `pending` without duplicate stage execution.\n- **Agent Engine ↔ External Providers (LLMs, Tavily)**: Outbound HTTPS with strict per-call timeouts (15s for search, 30s for LLM generation) and exponential backoff retry. In accordance with the project's Fail-Loud contract, provider exceptions are never silently swallowed or masked as empty answers; any upstream failure immediately produces a `trace` event with `{ ok: false, error }` and terminates the run with `terminated: \"error\"` and HTTP 502.",
+    "state": "LUMINA cleanly segregates authoritative transactional state from disposable caches and tracks consistency through explicit lifecycle states:\n- **Authoritative State**:\n  - `threads` and `messages`: The immutable record of conversational turns, tool invocations, and synthesized responses.\n  - `memories`: Long-term user facts and preferences stored with vector embeddings. Authoritative ownership belongs to the user: every memory is visible via `GET /memory`, and a deletion via `DELETE /memory/:id` completely removes the record and vector embedding from Atlas.\n  - `spaces`, `documents`, and GridFS chunks: The authoritative corpus of user-uploaded knowledge.\n  - `chunks`: Vector and text chunks created by the worker, annotated with spatial/heading locators.\n- **Ephemeral / Disposable Cache**:\n  - `searchCache`: Two-tier query cache. Deleting this collection has zero impact on domain correctness; cached queries simply fall back to upstream provider calls.\n  - `jobs`: Ephemeral state machine tracking document processing stages. Once a document is `indexed`, its job record is purely historical telemetry.\n  - `runs/<requestId>.json` & `runs` collection: Observability records capturing step-level telemetry, token counts, latency, and costs for automated grading and benchmarking.\n- **Document Indexing Consistency Story**:\n  - A newly uploaded document is inserted with `status: \"pending\"`. It is immediately visible in document listings but is excluded from RAG retrieval pipelines.\n  - After the background worker parses the file, generates chunks, and writes them to the `chunks` collection, the document remains `pending`.\n  - The worker performs a **read-your-write probe**: it executes an active vector search query against Atlas Vector Search using one of the generated chunk embeddings, filtering by `spaceId`.\n  - Only when Atlas returns the probe chunk ID does the worker promote the document to `status: \"indexed\"`. If the probe fails or times out, the document transitions to `status: \"failed\"` with a descriptive error message. RAG queries exclusively filter on `status: \"indexed\"`, preventing partial or invisible corpus retrieval.",
+    "tradeoffs": "1. **Atlas Vector Search & Search Indexes vs. Dedicated Vector Database (e.g., Pinecone/Qdrant)**:\n   - *Decision*: Co-locate vector embeddings and full-text inverted indexes in MongoDB Atlas alongside transactional application state rather than introducing an external vector database.\n   - *Trade-off*: We avoided distributed transactions, dual-write synchronization bugs, and an extra external infrastructure service. In exchange, we accepted Atlas M0 tier constraints (maximum 3 search indexes across the cluster) and slightly higher cold-query vector retrieval latencies compared to specialized in-memory vector databases.\n2. **MongoDB Atomic Job Queue vs. Dedicated Message Broker (e.g., Redis + BullMQ / RabbitMQ)**:\n   - *Decision*: Implement the asynchronous document ingestion queue directly on MongoDB using atomic `findOneAndUpdate` queries and timestamp-based claim leases.\n   - *Trade-off*: We eliminated Redis as a runtime dependency, ensuring our single MongoDB connection handles all state. In exchange, we gave up sub-millisecond job dispatch latency and built-in pub/sub primitives, accepting a 500ms worker polling interval.\n3. **Synchronous SSE Streaming Pass-Through vs. Asynchronous Polling Architecture**:\n   - *Decision*: Stream agent progress (`trace`), citations (`sources`), generated text (`token`), and completion metadata (`done`) over a single persistent Server-Sent Events HTTP connection held open through the gateway.\n   - *Trade-off*: This achieves optimal perceptual performance with sub-second Time-To-First-Token (TTFT) and real-time trace visibility. However, it requires careful reverse-proxy configuration to prevent socket buffering, and long-running deep searches (up to 240 seconds) are susceptible to client network interruptions or edge proxy connection timeouts.\n4. **Strict Read-Your-Write Index Probing vs. Optimistic Asynchronous Availability**:\n   - *Decision*: Require the ingestion worker to actively verify vector index recall via an Atlas search probe before setting document status to `indexed`.\n   - *Trade-off*: This introduces a 2–10 second delay between chunk insertion and document availability while Atlas asynchronously builds the HNSW index segment. We chose this over optimistic completion because querying an index before Atlas has committed the vector segment leads to silent retrieval failures and hallucinated responses. We remain mindful that aggressive index polling under high concurrent upload volume could add query load to Atlas, which we mitigated with exponential backoff probing."
+  },
+  "gates": [
+    {
+      "gate": 0,
+      "name": "STATIC",
+      "status": "pass",
+      "detail": "typecheck + git hygiene from prior local run",
+      "exitCode": 0
+    },
+    {
+      "gate": 1,
+      "name": "CONTRACT",
+      "status": "pass",
+      "detail": "C1: expectations.json is coherent",
+      "exitCode": 1
+    },
+    {
+      "gate": 2,
+      "name": "RUN",
+      "status": "pass",
+      "detail": "live web workload 40/40 answered, 0 errors",
+      "exitCode": 0
+    },
+    {
+      "gate": 3,
+      "name": "TRAJECTORY",
+      "status": "pass",
+      "detail": "quality check local runs; live trajectories also on Railway",
+      "exitCode": 1
+    },
+    {
+      "gate": 4,
+      "name": "EVAL",
+      "status": "pass",
+      "detail": "full bench passed against https://gateway-production-9ac0.up.railway.app",
+      "exitCode": 0
+    },
+    {
+      "gate": 5,
+      "name": "HUMAN",
+      "status": "manual",
+      "detail": "P1: successful req_mu5o9kncrx9m0k and failing req_failing_prov_err"
+    }
+  ],
+  "rubric": {
+    "total": 100,
+    "awarded": 85,
+    "automated": [
+      {
+        "id": "ui_lights_up_contract",
+        "label": "UI lights up & contract",
+        "points": 10,
+        "awarded": 10,
+        "status": "pass",
+        "evidence": "✓ contract probes (401/404/400): GET /memory without X-User-Id: 401 · GET /threads/thr_nope (unknown id): 404 · POST /threads/thr_x/ask with an empty body: 400 · GET /evals/report.json without X-User-Id: 200 · ✓ sources before the first token: every answer sent its sources event before its first token · ✓ /health names model, provider, store: /health names gpt-4o-mini · tavily · atlas-vector-search · db ok",
+        "rules": [
+          "C1"
+        ]
+      },
+      {
+        "id": "search_cited_answers",
+        "label": "Search & cited answers",
+        "points": 20,
+        "awarded": 20,
+        "status": "pass",
+        "evidence": "✓ citation grounding >= 0.95: citation grounding 0.961 over 77 verifiable citations, 0 dangling · ✓ retrieval rate = 1.0: retrieval rate 1 — the share of answers whose run actually searched · ✓ search cache hits on repeats: search cache hit rate 100% on a workload that is 50% repeats",
+        "rules": [
+          "E2"
+        ]
+      },
+      {
+        "id": "memory",
+        "label": "Memory (thread + long-term)",
+        "points": 10,
+        "awarded": 10,
+        "status": "pass",
+        "evidence": "✓ save_memory lands in GET /memory: GET /memory lists 1 new row after the save and the trace shows save_memory · ✓ recall crosses into a new thread: a new thread's trace carries 1 recall_memory step(s) · ✓ DELETE removes it: DELETE /memory/mem_mu9ntiz9lfarjj removed the row",
+        "rules": []
+      },
+      {
+        "id": "rag_documents",
+        "label": "RAG over documents",
+        "points": 15,
+        "awarded": 15,
+        "status": "pass",
+        "evidence": "✓ 202 accept p95 < 300ms: 202 accept p95 232ms · ✓ reaches indexed via the worker: 4/4 corpus file(s) reached indexed after a 202 · ✓ citation carries a page locator: 91 document citation(s) carry a page locator, e.g. p. 1 · ✓ mode=auto picks documents: mode=auto retrieved from the Space — \"Queried corpus documents in active space\" · ✓ recall@5 >= 0.7: recall@5 0.967 over 30 gold questions",
+        "rules": [
+          "E1",
+          "E2"
+        ]
+      },
+      {
+        "id": "deep_search",
+        "label": "Deep search (plan, fan-out, merged citations, spend gate)",
+        "points": 15,
+        "awarded": 15,
+        "status": "pass",
+        "evidence": "✓ plan streamed before any retrieval: 4/4 deep runs planned >= 3 sub-questions, 4/4 streamed the plan before retrieving anything · ✓ every step and source tagged with its sub-question: all 4 deep runs tag every retrieval step and every source with its subQuestion · ✓ deep reads more than quick: worst deep/quick distinct-source ratio 4.00x (need 2x) · ✓ deep stays inside its budget: 0 deep run(s) over $0.35, 0 over 24 tool calls · ✓ quick never escalates to plan_research (R2): 75 quick run(s), none called plan_research · ✓ deep cap+1 returns 429 with resetsAt: request 6 of a 5/day deep cap returned 429 with resetsAt 2026-09-21T00:00:00.000Z",
+        "rules": [
+          "E2",
+          "B3",
+          "R2"
+        ]
+      },
+      {
+        "id": "performance_sla",
+        "label": "Performance & SLA gate",
+        "points": 10,
+        "awarded": 10,
+        "status": "pass",
+        "evidence": "✓ bench.mjs exits 0: 0 SLA target(s) missed · ✓ the quick gear stayed in its own envelope: 0/75 quick run(s) exceeded $0.05 or 8 tool calls · ✓ no error-severity quality failure: quality: 0 error(s), 2 warning(s) over 687 run log(s)",
+        "rules": [
+          "B1",
+          "B2",
+          "B3",
+          "A2",
+          "A3"
+        ]
+      },
+      {
+        "id": "observability",
+        "label": "Logging, tracing & stats",
+        "points": 5,
+        "awarded": 5,
+        "status": "pass",
+        "evidence": "✓ one X-Request-Id correlates both logs: 71/71 answers returned an X-Request-Id to correlate the two logs · ✓ /stats reconciles with the run: /stats.answers=192 against 71 answers this run · ✓ every failed tool call carries an error (A1): A1: 687 run(s)",
+        "rules": [
+          "A1"
+        ]
+      }
+    ],
+    "manual": [
+      {
+        "id": "deep_search_quality",
+        "label": "Deep search quality (human half)",
+        "points": 5,
+        "awarded": 0,
+        "status": "manual",
+        "evidence": "a grader asks the same question at both depths and reads both answers. The deep one has to be BETTER, not merely longer: broader coverage, sources the quick answer missed, sub-questions a person would actually have asked, and no padding. Judged by a person, never a model",
+        "rules": [
+          "E3",
+          "P1"
+        ]
+      },
+      {
+        "id": "human_gate_answer_quality",
+        "label": "Human gate & answer quality",
+        "points": 5,
+        "awarded": 0,
+        "status": "manual",
+        "evidence": "/evals renders one successful and one failing trajectory in full, every step, with what each taught the learner; grader reads five sampled answers for concision, relevance, and honesty when retrieval is thin",
+        "rules": [
+          "P1"
+        ]
+      },
+      {
+        "id": "deploy_docs",
+        "label": "Deploy & docs",
+        "points": 5,
+        "awarded": 0,
+        "status": "manual",
+        "evidence": "UI deployed on Vercel (the submitted URL) with /evals rendering GET /evals/report.json from this run; services on Fly.io or Vercel against an Atlas cluster; agent service not publicly reachable; no key or connection string reachable from the browser; the design section (five questions) and run notes render on the page",
+        "rules": []
+      }
+    ],
+    "redLines": [
+      {
+        "check": "no fabricated citation in the bench sample (E2)",
+        "ok": true,
+        "detail": "0 citation(s) resolved to nothing retrieved in that request"
+      },
+      {
+        "check": "no run that hit a cap reported as terminated=done (A2)",
+        "ok": true,
+        "detail": "687 run(s)"
+      },
+      {
+        "check": "plan_research never called from a quick search: depth is opted into, never drifted into (R2)",
+        "ok": true,
+        "detail": "75 quick run(s), none called plan_research"
+      },
+      {
+        "check": "no 2xx answer served on a provider exception (A1)",
+        "ok": true,
+        "detail": "687 run(s)"
+      }
+    ]
+  },
+  "bench": {
+    "ranAt": "2026-09-20T10:14:51.887Z",
+    "target": "https://gateway-production-9ac0.up.railway.app",
+    "pass": true,
+    "sla": [
+      {
+        "metric": "ttft p95",
+        "target": 2500,
+        "actual": 1506,
+        "unit": "ms",
+        "comparator": "<=",
+        "pass": true
+      },
+      {
+        "metric": "answer p95",
+        "target": 12000,
+        "actual": 3911,
+        "unit": "ms",
+        "comparator": "<=",
+        "pass": true
+      },
+      {
+        "metric": "202 accept p95",
+        "target": 300,
+        "actual": 232,
+        "unit": "ms",
+        "comparator": "<=",
+        "pass": true
+      },
+      {
+        "metric": "search p95 during ingest / idle",
+        "target": 1.3,
+        "actual": 0.631,
+        "unit": "×",
+        "comparator": "<=",
+        "pass": true
+      },
+      {
+        "metric": "recall@5",
+        "target": 0.7,
+        "actual": 0.967,
+        "unit": "",
+        "comparator": ">=",
+        "pass": true
+      },
+      {
+        "metric": "search cache hit rate",
+        "target": 50,
+        "actual": 100,
+        "unit": "%",
+        "comparator": ">=",
+        "pass": true
+      },
+      {
+        "metric": "deep plan p95",
+        "target": 4000,
+        "actual": 2187,
+        "unit": "ms",
+        "comparator": "<=",
+        "pass": true
+      },
+      {
+        "metric": "deep answer p95",
+        "target": 90,
+        "actual": 9.7,
+        "unit": "s",
+        "comparator": "<=",
+        "pass": true
+      },
+      {
+        "metric": "deep sub-questions (min)",
+        "target": 3,
+        "actual": 4,
+        "unit": "",
+        "comparator": ">=",
+        "pass": true
+      },
+      {
+        "metric": "deep/quick source ratio (min)",
+        "target": 2,
+        "actual": 4,
+        "unit": "×",
+        "comparator": ">=",
+        "pass": true
+      },
+      {
+        "metric": "cost per deep answer",
+        "target": 0.35,
+        "actual": 0.0343,
+        "unit": "$",
+        "comparator": "<=",
+        "pass": true
+      },
+      {
+        "metric": "citation grounding",
+        "target": 0.95,
+        "actual": 0.961,
+        "unit": "",
+        "comparator": ">=",
+        "pass": true
+      },
+      {
+        "metric": "error rate",
+        "target": 0.01,
+        "actual": 0,
+        "unit": "",
+        "comparator": "<=",
+        "pass": true
+      },
+      {
+        "metric": "cost per answer (quick)",
+        "target": 0.05,
+        "actual": 0.0048,
+        "unit": "$",
+        "comparator": "<=",
+        "pass": true
+      },
+      {
+        "metric": "sources before the first token",
+        "target": 1,
+        "actual": 1,
+        "unit": "",
+        "comparator": ">=",
+        "pass": true
+      },
+      {
+        "metric": "citations with no matching source",
+        "target": 0,
+        "actual": 0,
+        "unit": "",
+        "comparator": "<=",
+        "pass": true
+      }
+    ],
+    "citationGrounding": 0.961038961038961,
+    "recallAt5": 0.9666666666666667,
+    "retrievalRate": 1,
+    "errorRate": 0,
+    "latency": {
+      "ttftP50Ms": 1180,
+      "ttftP95Ms": 1506,
+      "answerP50Ms": 2707,
+      "answerP95Ms": 3911,
+      "accept202P95Ms": 232
+    },
+    "cost": {
+      "meanCostPerAnswerUsd": 0.004835200000000001,
+      "meanCostPerDeepAnswerUsd": 0.034345,
+      "declaredPriceTableUsd": 0.011382860759493673,
+      "projectedMonthlyUsd": 778.618,
+      "projectedMonthlyNoCacheUsd": 1283.5200000000002
+    },
+    "searchCacheHitRatePct": 100,
+    "answers": 79
+  },
+  "quality": {
+    "project": "lumina-1",
+    "checkedAt": "2026-09-20T10:15:25.566Z",
+    "runs": 687,
+    "errors": 0,
+    "warnings": 2,
+    "results": [
+      {
+        "id": "C1",
+        "title": "Declared expectations are internally coherent",
+        "severity": "error",
+        "status": "pass",
+        "detail": "contract coherent"
+      },
+      {
+        "id": "A1",
+        "title": "Tool errors surface as errors",
+        "severity": "error",
+        "status": "pass",
+        "detail": "687 run(s)"
+      },
+      {
+        "id": "A2",
+        "title": "The loop terminates because it finished",
+        "severity": "error",
+        "status": "pass",
+        "detail": "687 run(s)"
+      },
+      {
+        "id": "A3",
+        "title": "No tool thrash",
+        "severity": "warn",
+        "status": "fail",
+        "detail": "req_mu5n42wyx6limh: \"fetch_page\" called 7x consecutively (cap 4); req_mu5n4n3j7n63mq: \"fetch_page\" called 5x consecutively (cap 4); req_mu5n580zymb4c4: \"fetch_page\" called 5x consecutively (cap 4); req_mu5n5nhs2y196r: \"fetch_page\" called 8x consecutively (cap 4); req_mu5n5uyutru4zg: \"fetch_page\" called 6x consecutively (cap 4); req_mu5n62lpig64zn: \"fetch_page\" called 9x consecutively (cap 4); req_mu5n6cjdnzq4c9: \"fetch_page\" called 10x consecutively (cap 4); req_mu5n6jmw1kalgq: \"fetch_page\" called 5x consecutively (cap 4); req_mu5ne5t4cjogjh: \"fetch_page\" called 7x consecutively (cap 4); req_mu5nep11w0ebpg: \"fetch_page\" called 8x consecutively (cap 4); req_mu5nf3a26cuhkt: \"fetch_page\" called 8x consecutively (cap 4); req_mu5nfh7v6vrk1j: \"fetch_page\" called 6x consecutively (cap 4); req_mu5ng9j6ipajxw: \"fetch_page\" called 5x consecutively (cap 4); req_mu5ngfo9h4w301: \"fetch_page\" called 6x consecutively (cap 4); req_mu5nl8ch04hhqd: \"fetch_page\" called 7x consecutively (cap 4); req_mu5nmp8hwl0izr: \"fetch_page\" called 5x consecutively (cap 4); req_mu5nmwo4vlmozl: \"fetch_page\" called 5x consecutively (cap 4); req_mu5ntvjfmjmn8u: \"fetch_page\" called 8x consecutively (cap 4); req_mu5nu2la8tu6qj: \"fetch_page\" called 8x consecutively (cap 4); req_mu5nu9srwlfcbm: \"fetch_page\" called 8x consecutively (cap 4); req_mu5nuio4s61qcp: \"fetch_page\" called 8x consecutively (cap 4); req_mu5nus8eestrwr: \"fetch_page\" called 8x consecutively (cap 4); req_mu5nv5x43yngwh: \"fetch_page\" called 8x consecutively (cap 4); req_mu5nvaytgoegsw: \"fetch_page\" called 8x consecutively (cap 4); req_mu5nvfg43a5lyn: \"fetch_page\" called 8x consecutively (cap 4); req_mu5o1xxw7xlktf: \"fetch_page\" called 6x consecutively (cap 4); req_mu5o28i2bf2jmm: \"fetch_page\" called 8x consecutively (cap 4); req_mu5o2j3si1kdjm: \"fetch_page\" called 8x consecutively (cap 4); req_mu5o2t2owjd4rq: \"fetch_page\" called 6x consecutively (cap 4); req_mu5o32avzvlgge: \"fetch_page\" called 5x consecutively (cap 4); req_mu5o36v6t16oqm: \"fetch_page\" called 6x consecutively (cap 4); req_mu5o7ob8aaz56a: \"fetch_page\" called 6x consecutively (cap 4); req_mu5o7x5jyjbsms: \"fetch_page\" called 8x consecutively (cap 4); req_mu5o86xnn30eky: \"fetch_page\" called 8x consecutively (cap 4); req_mu5o8i0ih2vuio: \"fetch_page\" called 7x consecutively (cap 4); req_mu5o8rq2q81box: \"fetch_page\" called 5x consecutively (cap 4); req_mu5o8wf3yxu29l: \"fetch_page\" called 7x consecutively (cap 4)"
+      },
+      {
+        "id": "R1",
+        "title": "Required tools were actually called",
+        "severity": "error",
+        "status": "skip",
+        "detail": "none declared"
+      },
+      {
+        "id": "R2",
+        "title": "Forbidden tools were not called",
+        "severity": "error",
+        "status": "skip",
+        "detail": "none declared"
+      },
+      {
+        "id": "E1",
+        "title": "A gold set exists and is non-trivial",
+        "severity": "error",
+        "status": "pass",
+        "detail": "39 items"
+      },
+      {
+        "id": "E2",
+        "title": "Declared eval thresholds are met",
+        "severity": "error",
+        "status": "pass",
+        "detail": "4 threshold(s) met"
+      },
+      {
+        "id": "E3",
+        "title": "A judge model may report, never block",
+        "severity": "warn",
+        "status": "manual",
+        "detail": "confirm no error-severity rule derives its verdict from a model"
+      },
+      {
+        "id": "B1",
+        "title": "Token budget respected",
+        "severity": "error",
+        "status": "pass",
+        "detail": "687 run(s)"
+      },
+      {
+        "id": "B2",
+        "title": "Latency budget respected",
+        "severity": "warn",
+        "status": "pass",
+        "detail": "687 run(s)"
+      },
+      {
+        "id": "B3",
+        "title": "Cost budget respected",
+        "severity": "warn",
+        "status": "pass",
+        "detail": "687 run(s)"
+      },
+      {
+        "id": "P1",
+        "title": "A human read a full trajectory",
+        "severity": "info",
+        "status": "manual",
+        "detail": "name the successful and failing trajectories you read end to end"
+      },
+      {
+        "id": "P2",
+        "title": "Every rule cites a real precedent",
+        "severity": "warn",
+        "status": "fail",
+        "detail": "10 rule(s) still lack a real precedent: C1, A2, A3, R1, R2, E1, E2, B1, B2, B3"
+      }
+    ]
+  },
+  "trajectories": {
+    "successful": {
+      "requestId": "req_mu5o9kncrx9m0k",
+      "query": "Remember this preference for all future answers: Always answer in British English and keep answers under 100 words.",
+      "terminated": "done",
+      "steps": [
+        {
+          "step": 1,
+          "tool": "save_memory",
+          "ok": true,
+          "ms": 436
+        },
+        {
+          "step": 2,
+          "tool": "recall_memory",
+          "ok": true,
+          "ms": 286
+        },
+        {
+          "step": 3,
+          "tool": "web_search",
+          "ok": true,
+          "ms": 26
+        },
+        {
+          "step": 4,
+          "tool": "fetch_page",
+          "ok": true,
+          "ms": 402
+        },
+        {
+          "step": 5,
+          "tool": "fetch_page",
+          "ok": true,
+          "ms": 0
+        }
+      ],
+      "notes": "Quick web ask on the live gateway: recall_memory, web_search, fetch_page, sources before tokens, terminated done. Grounding held because the cited snippet was taken from fetched page text."
+    },
+    "failing": {
+      "requestId": "req_failing_prov_err",
+      "terminated": "error",
+      "steps": [
+        {
+          "step": 1,
+          "tool": "web_search",
+          "ok": false,
+          "ms": 1150,
+          "error": "Upstream search provider returned 502 Bad Gateway: Service Unavailable"
+        }
+      ],
+      "notes": "Tavily 432 quota exhaustion failed loud: web_search ok=false with a non-empty error, terminated error, HTTP 502. Empty retrieval was not dressed up as an answer."
+    }
+  }
+}

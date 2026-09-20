@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SSE_Streaming_&amp;_Protocol_4 · LUMINA graphify</title>
+<style>
+:root, [data-theme='dark'] {
+  --bg: #0b0d10; --panel: #12151a; --border: #232a33;
+  --text: #e7ecf2; --muted: #94a2b3; --accent: #5eead4;
+  --hover: #1c222a; --code-bg: #0e1116; --code-ink: #f8fafc;
+  color-scheme: dark;
+}
+[data-theme='light'] {
+  --bg: #f3f5f8; --panel: #ffffff; --border: #d4dce5;
+  --text: #12161c; --muted: #4a5868; --accent: #0f766e;
+  --hover: #e4eaf0; --code-bg: #eef2f6; --code-ink: #12161c;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 15px/1.55 ui-sans-serif, system-ui, sans-serif; }
+.layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100%; }
+aside { background: var(--panel); border-right: 1px solid var(--border);
+  padding: 20px 16px; overflow: auto; position: sticky; top: 0; height: 100vh; }
+aside h1 { font-size: 15px; margin: 0 0 4px; }
+aside .meta { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+#filter { width: 100%; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); padding: 8px 10px; border-radius: 6px; margin-bottom: 16px; }
+nav h2 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); margin: 16px 0 6px; }
+nav a { display: block; color: var(--text); text-decoration: none; padding: 5px 8px;
+  border-radius: 6px; font-size: 13px; }
+nav a:hover, nav a.active { background: var(--hover); color: var(--accent); }
+main:not(.viz) { padding: 32px 40px 64px; max-width: 880px; }
+main:not(.viz) h1 { font-size: 28px; margin: 0 0 12px; }
+main:not(.viz) h2 { font-size: 20px; margin: 32px 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+main:not(.viz) h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+main:not(.viz) p, main:not(.viz) li { color: var(--muted); }
+.lede { color: var(--text); background: var(--code-bg); border: 1px solid var(--border);
+  padding: 10px 12px; border-radius: 8px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.88em;
+  background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: var(--code-ink); }
+a { color: var(--accent); }
+table { width: 100%; border-collapse: collapse; margin: 12px 0 24px; font-size: 13px; }
+th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+th { color: var(--accent); background: var(--code-bg); }
+.mermaid { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px; margin: 16px 0; }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.card h3 { margin-top: 0; }
+.layout.viz, .layout.shell { height: 100%; }
+main.viz, main.shell { padding: 0; max-width: none; height: 100%; overflow: hidden; }
+iframe#article { display: block; width: 100%; height: 100%; border: 0; background: var(--bg); }
+.viz-inner { height: 100%; min-height: 0; }
+.viz-graph { display: flex; overflow: hidden; background: var(--bg); color: var(--text); height: 100%; }
+.viz-graph #graph { flex: 1; min-width: 0; min-height: 0; height: 100%; background: var(--bg); }
+.viz-graph #sidebar { background: var(--panel); border-left: 1px solid var(--border); color: var(--text); }
+.viz-graph #search { background: var(--bg); color: var(--text); border-color: var(--border); }
+.viz-graph #info-content, .viz-graph #stats, .viz-graph .legend-count { color: var(--muted); }
+.viz-tree { overflow: auto; background: var(--bg); color: var(--text); }
+.viz-tree h1 { color: var(--text) !important; margin: 16px 20px 0; }
+.viz-tree .controls { margin: 12px 20px; }
+.viz-tree button { background: var(--accent) !important; color: var(--bg) !important; }
+.viz-tree #tree-container, .viz-tree svg { background: var(--panel) !important; border-color: var(--border) !important; }
+.viz-tree .node text { stroke: var(--bg) !important; }
+.viz-flow { overflow: auto; background: var(--bg); color: var(--text);
+  --surface: var(--panel); --warn: #fbbf24; --err: #f87171; --ok: #34d399; }
+[data-theme='light'] .viz-flow { --warn: #b45309; --err: #b91c1c; --ok: #047857; }
+.viz-flow .nav { background: var(--bg) !important; border-color: var(--border) !important; }
+.viz-flow .container { background: var(--bg); }
+.viz-flow .mermaid { background: var(--panel) !important; border-color: var(--border) !important; }
+.viz-flow .mermaid-toolbar { background: var(--panel) !important; border-color: var(--border) !important;
+  box-shadow: none !important; }
+.viz-flow .mermaid-toolbar button, .viz-flow .mermaid-toolbar .zoom-level {
+  background: var(--bg) !important; color: var(--text) !important; border-color: var(--border) !important; }
+.viz-flow .call-table th { background: var(--code-bg) !important; color: var(--accent) !important; }
+.viz-flow .call-table tr:nth-child(even) { background: var(--hover) !important; }
+.viz-flow .card { background: var(--panel) !important; border-color: var(--border) !important; }
+.viz-flow code { background: var(--code-bg) !important; color: var(--code-ink) !important; }
+.viz-flow h1 { background: none !important; -webkit-text-fill-color: unset !important; color: var(--text) !important; }
+.aside-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.nav-toggle { display: none; }
+@media (max-width: 640px) {
+  .layout { grid-template-columns: 1fr; }
+  .layout.shell { grid-template-rows: auto 1fr; height: 100%; }
+  aside { position: relative; height: auto; max-height: none; overflow: visible;
+    border-right: none; border-bottom: 1px solid var(--border); z-index: 4; }
+  .aside-head { align-items: center; padding-bottom: 4px; }
+  .aside-head .meta { margin-bottom: 0; }
+  .nav-toggle { display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; font: 600 13px ui-sans-serif, system-ui, sans-serif; }
+  aside:not(.open) .aside-body { display: none; }
+  aside.open { position: absolute; left: 0; right: 0; top: 0; max-height: 80%;
+    overflow: auto; box-shadow: 0 16px 40px rgba(0,0,0,.28); }
+  main:not(.viz) { padding: 20px 16px 48px; }
+  main.viz, main.shell { height: 100%; min-height: 0; }
+  iframe#article { height: 100%; }
+  .cards { grid-template-columns: 1fr; }
+  .viz-graph { flex-direction: column; }
+  .viz-graph #graph { width: 100%; min-height: 58%; height: 58%; }
+  .viz-graph #sidebar { width: 100% !important; max-height: 42%; border-left: none;
+    border-top: 1px solid var(--border); }
+  .viz-flow .mermaid { overflow-x: auto; }
+}
+.path-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 16px 0 8px; }
+.path-field { flex: 1 1 220px; position: relative; min-width: 0; }
+.path-field label { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px; }
+.path-field input { width: 100%; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); padding: 8px 10px; border-radius: 6px; }
+.path-suggest { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 6;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; max-height: 220px; overflow: auto; }
+.path-suggest button { display: block; width: 100%; text-align: left; background: transparent; border: 0;
+  color: var(--text); padding: 8px 10px; font: inherit; cursor: pointer; }
+.path-suggest button small { display: block; color: var(--muted); font-size: 11px; }
+.path-suggest button:hover, .path-suggest button[aria-selected="true"] { background: var(--hover); }
+.path-go { background: var(--accent); color: var(--bg); border: 0; border-radius: 8px;
+  padding: 9px 16px; font: 600 14px ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.path-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.path-chips button { background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  border-radius: 999px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.path-status { color: var(--muted); min-height: 1.4em; }
+.path-status.bad { color: #f87171; }
+[data-theme='light'] .path-status.bad { color: #b91c1c; }
+.path-diagram { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0; }
+.path-node { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; font-weight: 600; max-width: 100%; }
+.path-node.end { border-color: var(--accent); color: var(--accent); }
+.path-rel { font-size: 12px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.path-rel span { color: var(--accent); }
+.path-empty { display: none; }
+@media (max-width: 640px) {
+  .path-diagram { flex-direction: column; align-items: stretch; }
+  .path-rel { text-align: center; }
+  .path-go { width: 100%; min-height: 44px; }
+  #path-out table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+</style>
+<script>(function(){try{var t=localStorage.getItem("lumina.theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();</script>
+
+</head>
+<body>
+<main>
+  <h1>SSE Streaming &amp; Protocol</h1>
+<p class="lede">15 nodes</p>
+<h2>Key Concepts</h2>
+<ul>
+<li><strong>report.ts</strong> (16 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>ref_zod</strong> (5 connections)</li>
+<li><strong>Terminated</strong> (3 connections) — <code>packages/contract/src/sse.ts</code></li>
+<li><strong>ToolName</strong> (3 connections) — <code>packages/contract/src/sse.ts</code></li>
+<li><strong>BenchReport</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>DesignAnswers</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>EvalsReport</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>GateResult</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>QualityReport</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>QualityRuleResult</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>RubricReport</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>RubricRow</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>SlaRow</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>Trajectory</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+<li><strong>TrajectoryStep</strong> (1 connections) — <code>packages/contract/src/report.ts</code></li>
+</ul>
+<h2>Relationships</h2>
+<ul>
+<li><a href="API_Contract_&amp;_Schemas.html">API Contract &amp; Schemas</a> (6 shared connections)</li>
+<li><a href="SSE_Streaming_&amp;_Protocol.html">SSE Streaming &amp; Protocol</a> (4 shared connections)</li>
+</ul>
+<h2>Source Files</h2>
+<ul>
+<li><code>packages/contract/src/report.ts</code></li>
+<li><code>packages/contract/src/sse.ts</code></li>
+</ul>
+<h2>Audit Trail</h2>
+<ul>
+<li>EXTRACTED: 24 (100%)</li>
+<li>INFERRED: 0 (0%)</li>
+<li>AMBIGUOUS: 0 (0%)</li>
+</ul>
+<hr>
+<p>*Part of the graphify knowledge wiki. See <a href="index.html">index</a> to navigate.*</p>
+</main>
+<script>
+function luminaTheme() {
+  try {
+    const t = localStorage.getItem('lumina.theme');
+    if (t === 'light' || t === 'dark') return t;
+  } catch (e) {}
+  return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+function applyLuminaTheme(t) {
+  document.documentElement.setAttribute('data-theme', t || luminaTheme());
+}
+applyLuminaTheme();
+window.addEventListener('storage', (e) => {
+  if (!e.key || e.key === 'lumina.theme') applyLuminaTheme();
+});
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin) return;
+  if (e.data && e.data.type === 'lumina-theme') applyLuminaTheme(e.data.theme);
+});
+
+try {
+  if (!(window.frameElement && window.frameElement.id === 'article') && window.top === window) {
+    var file = location.pathname.split('/').pop() || 'architecture.html';
+    location.replace('app.html?p=' + encodeURIComponent(file));
+  }
+} catch (e) {}
+</script>
+
+</body>
+</html>

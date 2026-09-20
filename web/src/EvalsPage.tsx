@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { EvalsReport, type GateResult, type RubricRow, type SlaRow, type Trajectory } from '@lumina/contract';
 import { api } from './api';
 import { Problem } from './components/Notice';
+import { ThemeToggle } from './components/ThemeToggle';
+import { AppNav } from './components/AppNav';
 
 /**
  * /evals — the Product Evaluation. THIS PAGE IS THE SUBMISSION (SUBMISSION.md).
@@ -243,12 +245,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="brand">
           LUM<span>INA</span>
         </div>
-        <nav>
-          <a href="/">Ask</a>
-          <a href="/evals" className="on">
-            Evals
-          </a>
-        </nav>
+        <AppNav active="evals" />
+        <ThemeToggle />
       </header>
       <div className="evals">{children}</div>
     </>

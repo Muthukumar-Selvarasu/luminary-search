@@ -1,8 +1,10 @@
 import { config } from 'dotenv';
-import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 // The single .env at the assignment root. Provider keys are read HERE and nowhere else.
-config({ path: resolve(process.cwd(), '../../.env') });
+const here = dirname(fileURLToPath(import.meta.url));
+config({ path: resolve(here, '../../../.env') });
 config({ path: resolve(process.cwd(), '.env') });
 
 const num = (v: string | undefined, fallback: number) => {
@@ -38,8 +40,7 @@ export const env = {
   maxWallClockSecDeep: num(process.env.MAX_WALL_CLOCK_SEC_DEEP, 240),
 
   logLevel: process.env.LOG_LEVEL ?? 'info',
-  /** Where the per-answer run logs land. quality/check.mjs reads this folder. */
-  runsDir: resolve(process.cwd(), '../../runs')
+  runsDir: resolve(here, '../../../runs')
 } as const;
 
 /** Never log or return these. /health names the model; it never echoes a key. */
