@@ -26,6 +26,7 @@ import { db, pingDb } from './db.js';
 import { initSseStream } from './sse.js';
 import { executeAsk } from './agent.js';
 import { getGridFSBucket } from './rag/gridfs.js';
+import { beginInteractive, endInteractive } from './load.js';
 import { startWorker } from './worker.js';
 import { listMemories, deleteMemory } from './memory/memoryService.js';
 
@@ -205,17 +206,30 @@ app.post('/threads/:id/ask', async (req, res) => {
   // Initialize zero-buffering SSE stream
   const sse = initSseStream(res);
 
-  // Execute agent loop
-  await executeAsk({
-    threadId,
-    userId,
-    requestId,
-    query,
-    depth,
-    mode,
-    spaceId,
-    sse
-  });
+  // Hold the ingest worker off Atlas and the embedding API until this answer finishes.
+  beginInteractive();
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    endInteractive();
+  };
+  res.on('close', release);
+
+  try {
+    await executeAsk({
+      threadId,
+      userId,
+      requestId,
+      query,
+      depth,
+      mode,
+      spaceId,
+      sse
+    });
+  } finally {
+    release();
+  }
 });
 
 // ---------------------------------------------------------------- spaces & documents
@@ -286,7 +300,9 @@ app.delete('/spaces/:id', async (req, res) => {
     if (d.fileId) {
       try {
         await bucket.delete(new ObjectId(String(d.fileId)));
-      } catch {}
+      } catch {
+        // GridFS file already removed; the document row is what this request must delete.
+      }
     }
   }
 
@@ -468,7 +484,9 @@ app.delete('/spaces/:id/documents/:docId', async (req, res) => {
   if (doc?.fileId) {
     try {
       await bucket.delete(new ObjectId(String(doc.fileId)));
-    } catch {}
+    } catch {
+      // GridFS file already removed; the document row is what this request must delete.
+    }
   }
 
   await database.collection<any>('chunks').deleteMany({ docId });

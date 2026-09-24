@@ -88,13 +88,13 @@ app.get('/health', async (_req, res) => {
 });
 
 // /evals/report.json (No auth required)
-// Prefer the Vite-built copy (same file Vercel serves from web/public/evals/report.json)
-// so Railway and Vercel cannot drift after a rebuild.
+// Prefer the report the eval skill wrote next to this service. The Vite copy under
+// web/dist is the previous public file and must not hide a newer bench.
 app.get('/evals/report.json', (_req, res) => {
   const possiblePaths = [
-    resolve(env.webDist, 'evals/report.json'),
-    resolve(process.cwd(), 'backend/gateway/evals-report.json'),
     resolve(process.cwd(), 'evals-report.json'),
+    resolve(process.cwd(), 'backend/gateway/evals-report.json'),
+    resolve(env.webDist, 'evals/report.json'),
     resolve(process.cwd(), 'reports/report.json'),
     resolve(process.cwd(), '../../reports/report.json'),
     resolve(process.cwd(), 'reports/eval.json'),

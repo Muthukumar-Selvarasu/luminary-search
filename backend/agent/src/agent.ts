@@ -4,7 +4,7 @@ import { env } from './env.js';
 import { db } from './db.js';
 import type { SseStream } from './sse.js';
 import { webSearch, type WebSearchHit } from './tools/webSearch.js';
-import { fetchPage, passageSnippet } from './tools/fetchPage.js';
+import { evidenceWindow, fetchPage, groundedExcerpt, passageSnippet } from './tools/fetchPage.js';
 import { hybridSearchDocuments } from './rag/hybridSearch.js';
 import { saveMemory, recallMemories } from './memory/memoryService.js';
 import { computeCostUsd, writeRunLog, type ToolCallRecord } from './runs.js';
@@ -27,6 +27,8 @@ export interface RetrievedPassage {
   kind: 'web' | 'doc';
   title: string;
   snippet: string;
+  /** Longer fetched-page window used only for synthesis. Not sent as the citation. */
+  body?: string;
   url?: string;
   docId?: string;
   locator?: Locator;
@@ -38,25 +40,31 @@ function hitCap(toolCalls: number, maxToolCalls: number, startTime: number, maxW
   return toolCalls >= maxToolCalls || Date.now() - startTime > maxWallClockMs;
 }
 
-function defaultPlan(query: string): Array<{ i: number; question: string; reason: string }> {
-  return [
-    { i: 1, question: `Core facts and definitions: ${query}`, reason: 'Establish the baseline that later claims rest on' },
-    { i: 2, question: `Recent developments and comparisons for: ${query}`, reason: 'Capture what changed and how alternatives differ' },
-    { i: 3, question: `Limitations, trade-offs, and open questions for: ${query}`, reason: 'Surface what is still unknown after the facts' },
-    { i: 4, question: `Practical implications of: ${query}`, reason: 'Turn research into something a reader can act on' }
-  ];
+const TEMPLATE_PREFIXES = [
+  'core facts and definitions',
+  'recent developments and comparisons',
+  'limitations, trade-offs, and open questions',
+  'practical implications of'
+];
+
+function looksLikeFixedTemplate(questions: string[]): boolean {
+  if (questions.length === 0) return true;
+  const canned = questions.filter((q) =>
+    TEMPLATE_PREFIXES.some((prefix) => q.toLowerCase().startsWith(prefix))
+  );
+  return canned.length >= Math.min(3, questions.length);
 }
 
 function clampPlan(
   raw: Array<{ i?: number; question?: string; reason?: string }>
-): Array<{ i: number; question: string; reason: string }> {
+): Array<{ i: number; question: string; reason: string }> | null {
   const cleaned = raw
     .map((sq, idx) => ({
       i: Number(sq.i) > 0 ? Number(sq.i) : idx + 1,
       question: String(sq.question || '').trim(),
       reason: String(sq.reason || '').trim() || 'Needed to cover a distinct part of the question'
     }))
-    .filter((sq) => sq.question.length > 0);
+    .filter((sq) => sq.question.length > 8);
 
   const unique: typeof cleaned = [];
   const seen = new Set<string>();
@@ -67,11 +75,85 @@ function clampPlan(
     unique.push(sq);
   }
 
-  while (unique.length < env.deepSubQuestionsMin) {
-    unique.push(defaultPlan('the original question')[unique.length]!);
-  }
+  if (unique.length < env.deepSubQuestionsMin) return null;
+  if (looksLikeFixedTemplate(unique.map((sq) => sq.question))) return null;
 
   return unique.slice(0, env.deepSubQuestionsMax).map((sq, idx) => ({ ...sq, i: idx + 1 }));
+}
+
+const PLAN_TOOLS = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'plan_research',
+      description: 'Decompose this specific question into 3 to 6 sub-questions before any retrieval.',
+      parameters: {
+        type: 'object',
+        properties: {
+          subQuestions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                i: { type: 'integer' },
+                question: { type: 'string' },
+                reason: { type: 'string' }
+              },
+              required: ['i', 'question', 'reason']
+            },
+            minItems: 3,
+            maxItems: 6
+          },
+          reason: { type: 'string' }
+        },
+        required: ['subQuestions']
+      }
+    }
+  }
+];
+
+function parsePlanRaw(
+  decision: Awaited<ReturnType<typeof decideNextStep>>
+): Array<{ i?: number; question?: string; reason?: string }> {
+  const planToolCall = decision.toolCalls.find((t) => t.name === 'plan_research');
+  if (Array.isArray(planToolCall?.args.subQuestions)) {
+    return planToolCall.args.subQuestions as Array<{ i?: number; question?: string; reason?: string }>;
+  }
+  const text = decision.content || '';
+  const match = text.match(/\{[\s\S]*"subQuestions"[\s\S]*\}/);
+  if (!match) return [];
+  try {
+    const parsed = JSON.parse(match[0]) as { subQuestions?: unknown };
+    return Array.isArray(parsed.subQuestions)
+      ? (parsed.subQuestions as Array<{ i?: number; question?: string; reason?: string }>)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeResearchPlan(query: string, stricter: boolean) {
+  const instruction = stricter
+    ? `Call plan_research. The previous plan was a generic outline and is rejected.
+Write 4 sub-questions that mention the concrete people, places, offices, dates, or claims in the user's question.
+A reader who has not seen the original question must still know what is being asked.
+Do not start any question with "Core facts", "Recent developments", "Limitations", or "Practical implications".
+Do not retrieve anything.`
+    : `Call plan_research. Write 4 DISTINCT sub-questions a careful researcher would ask about THIS question, each with a one-line reason.
+Name the specific subject. Do not restate the original question as a prefix on a generic outline.
+Do not use a fixed template (definitions, recent developments, limitations, practical implications).
+Do not retrieve anything.`;
+
+  return decideNextStep(
+    [
+      { role: 'system', content: instruction },
+      { role: 'user', content: query }
+    ],
+    'deep',
+    PLAN_TOOLS,
+    20000,
+    0.4
+  );
 }
 
 export async function executeAsk(params: ExecuteAskParams): Promise<void> {
@@ -166,76 +248,40 @@ export async function executeAsk(params: ExecuteAskParams): Promise<void> {
     // Deep: plan_research FIRST, before any retrieval (including memory).
     let subQuestions: Array<{ i: number; question: string; reason: string }> = [];
     if (isDeep) {
-      const planTools = [
-        {
-          type: 'function' as const,
-          function: {
-            name: 'plan_research',
-            description: 'Decompose the question into 3 to 6 sub-questions before any retrieval.',
-            parameters: {
-              type: 'object',
-              properties: {
-                subQuestions: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      i: { type: 'integer' },
-                      question: { type: 'string' },
-                      reason: { type: 'string' }
-                    },
-                    required: ['i', 'question', 'reason']
-                  },
-                  minItems: 3,
-                  maxItems: 6
-                },
-                reason: { type: 'string' }
-              },
-              required: ['subQuestions']
-            }
-          }
-        }
-      ];
-
       const planStart = Date.now();
-      let planDecision: Awaited<ReturnType<typeof decideNextStep>> | null = null;
+      let planDecision: Awaited<ReturnType<typeof writeResearchPlan>>;
       try {
-        planDecision = await Promise.race([
-          decideNextStep(
-            [
-              {
-                role: 'system',
-                content:
-                  'Call plan_research. Produce 3 to 6 DISTINCT sub-questions a careful researcher would actually ask, each with a one-line reason. Do not restate the original question. Do not retrieve anything.'
-              },
-              { role: 'user', content: params.query }
-            ],
-            'deep',
-            planTools
-          ),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('plan_research timed out')), 1800)
-          )
-        ]);
-        totalTokensIn += planDecision.tokensIn;
-        totalTokensOut += planDecision.tokensOut;
+        planDecision = await writeResearchPlan(params.query, false);
       } catch {
-        planDecision = null;
+        planDecision = await writeResearchPlan(params.query, true);
+      }
+      totalTokensIn += planDecision.tokensIn;
+      totalTokensOut += planDecision.tokensOut;
+      subQuestions = clampPlan(parsePlanRaw(planDecision)) ?? [];
+
+      if (subQuestions.length < env.deepSubQuestionsMin) {
+        const retry = await writeResearchPlan(params.query, true);
+        totalTokensIn += retry.tokensIn;
+        totalTokensOut += retry.tokensOut;
+        planDecision = retry;
+        subQuestions = clampPlan(parsePlanRaw(retry)) ?? [];
       }
 
-      const planToolCall = planDecision?.toolCalls.find((t) => t.name === 'plan_research');
-      const raw = Array.isArray(planToolCall?.args.subQuestions)
-        ? (planToolCall?.args.subQuestions as Array<{ i?: number; question?: string; reason?: string }>)
-        : [];
-      subQuestions = clampPlan(raw.length ? raw : defaultPlan(params.query));
+      if (subQuestions.length < env.deepSubQuestionsMin) {
+        throw new Error('plan_research did not return question-specific sub-questions');
+      }
+
       subQuestionsCount = subQuestions.length;
+      const planReason =
+        (planDecision.toolCalls.find((t) => t.name === 'plan_research')?.args.reason as string) ||
+        'Decomposed the question before retrieval';
 
       params.sse.sendPlan({
         subQuestions,
-        reason: (planToolCall?.args.reason as string) || 'Decomposed the question before retrieval'
+        reason: planReason
       });
-      trace('plan_research', { query: params.query }, true, Date.now() - planStart, {
-        reason: 'Decomposed question into sub-questions before any retrieval'
+      trace('plan_research', { query: params.query, subQuestions }, true, Date.now() - planStart, {
+        reason: 'Model wrote sub-questions for this question before any retrieval'
       });
     }
 
@@ -261,8 +307,19 @@ export async function executeAsk(params: ExecuteAskParams): Promise<void> {
       }
 
       const searchStart = Date.now();
+      let searchRes;
+      try {
+        searchRes = await webSearch(question);
+      } catch (err) {
+        const error = (err as Error).message || 'web_search failed';
+        trace('web_search', { query: question }, false, Date.now() - searchStart, {
+          reason: 'Search provider failed',
+          error,
+          subQuestion
+        });
+        throw err;
+      }
       totalSearches++;
-      const searchRes = await webSearch(question);
       if (!searchRes.cached) allSearchesCached = false;
       trace('web_search', { query: question }, true, Date.now() - searchStart, {
         reason: subQuestion ? `Researching sub-question ${subQuestion}` : 'Executed web search for grounded evidence',
@@ -304,12 +361,14 @@ export async function executeAsk(params: ExecuteAskParams): Promise<void> {
           } else {
             content = hit.snippet || '';
           }
-          const snippet = passageSnippet(content);
+          const excerpt = fromPage ? groundedExcerpt(content, question) : null;
+          const snippet = excerpt?.snippet || passageSnippet(content, 280, question);
           if (!snippet) throw new Error('empty extracted content');
           passages.push({
             kind: 'web',
             title,
             snippet,
+            body: excerpt?.body || evidenceWindow(content, snippet),
             url: hit.url,
             subQuestion,
             fetched: fromPage
@@ -337,10 +396,13 @@ export async function executeAsk(params: ExecuteAskParams): Promise<void> {
         snippetFallback = true;
         for (const hit of toFetch) {
           if (!hit.snippet) continue;
+          const snippet = passageSnippet(hit.snippet, 280, question);
+          if (!snippet) continue;
           passages.push({
             kind: 'web',
             title: hit.title,
-            snippet: passageSnippet(hit.snippet, 280),
+            snippet,
+            body: snippet,
             url: hit.url,
             subQuestion,
             fetched: false
@@ -368,6 +430,7 @@ export async function executeAsk(params: ExecuteAskParams): Promise<void> {
             kind: 'doc',
             title: h.title,
             snippet,
+            body: body.slice(0, 1400),
             docId: h.docId,
             locator: h.locator,
             subQuestion,
@@ -492,7 +555,14 @@ export async function executeAsk(params: ExecuteAskParams): Promise<void> {
               ? `, line ${s.locator.line}`
               : '';
         const ref = s.url ? ` (${s.url})` : locatorStr ? ` (${locatorStr})` : '';
-        sourcesContext += `[${s.n}] ${s.title}${ref}:\n${s.snippet}\n\n`;
+        const passage = passages.find(
+          (p) =>
+            (p.kind === 'web' && p.url === s.url) ||
+            (p.kind === 'doc' && p.docId === s.docId && p.snippet === s.snippet)
+        );
+        const pageText = (passage?.body || s.snippet).trim();
+        const sq = s.subQuestion ? ` sub-question ${s.subQuestion}` : '';
+        sourcesContext += `[${s.n}]${sq} ${s.title}${ref}\nCITED PASSAGE: ${s.snippet}\nPAGE TEXT:\n${pageText}\n\n`;
       }
     }
 
@@ -517,12 +587,16 @@ Every factual claim needs an inline [n] citation.`
         content: `You are LUMINA.
 ${structureGuidance}
 ${memoryPrompt}
-GROUNDING:
-- Use ONLY the sources below. Every factual claim needs [n].
+GROUNDING (mandatory):
+- You have no knowledge of your own for this answer. PAGE TEXT is the only evidence.
+- State a fact only when those words appear in PAGE TEXT. Copy names, titles, offices, dates, and numbers exactly as written there.
+- If PAGE TEXT contradicts something you think you know, PAGE TEXT wins. Do not substitute a person, date, or title from memory.
+- If PAGE TEXT does not state the fact, say the sources do not state it. Do not fill the gap.
+- Every factual claim needs an inline [n] for the source the words came from.
 - Do not cite a number that is not in the list.
+- Conversation history is context only. It is not a source.
 - If retrieval was empty, say so and cite nothing.
-- Prefer fetched page text over snippets.
-
+${snippetFallback ? '- Some sources are search snippets because the live page could not be fetched. Say that, and still do not go beyond that text.\n' : ''}
 ${sourcesContext}`
       },
       ...conversationHistory,

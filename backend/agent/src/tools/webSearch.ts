@@ -16,6 +16,19 @@ export interface WebSearchOutput {
 
 const TIME_SENSITIVE = /\b(today|tonight|latest|breaking|this (week|month|year)|live|current)\b|\b(20(2[4-9]|[3-9]\d))\b/i;
 
+/** Tavily and SerpAPI return a JSON body on failure. Keep the message, drop the wrapper. */
+function providerError(provider: string, status: number, errText: string): string {
+  let detail = errText.replace(/\s+/g, ' ').trim();
+  try {
+    const parsed = JSON.parse(errText) as { detail?: { error?: unknown }; error?: unknown; message?: unknown };
+    const inner = parsed.detail?.error ?? parsed.error ?? parsed.message;
+    if (typeof inner === 'string' && inner.trim()) detail = inner.trim();
+  } catch {
+    // Body was not JSON; the trimmed text is the message.
+  }
+  return `${provider} search failed (${status}): ${detail}`;
+}
+
 export function isTimeSensitiveQuery(query: string): boolean {
   return TIME_SENSITIVE.test(query);
 }
@@ -53,7 +66,7 @@ export async function webSearch(query: string): Promise<WebSearchOutput> {
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Tavily search failed (${res.status}): ${errText}`);
+      throw new Error(providerError('Tavily', res.status, errText));
     }
 
     const data = (await res.json()) as {
@@ -81,7 +94,7 @@ export async function webSearch(query: string): Promise<WebSearchOutput> {
     const res = await fetch(url.toString(), { signal: AbortSignal.timeout(15000) });
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`SerpAPI search failed (${res.status}): ${errText}`);
+      throw new Error(providerError('SerpAPI', res.status, errText));
     }
 
     const data = (await res.json()) as {

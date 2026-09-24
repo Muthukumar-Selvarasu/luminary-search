@@ -163,7 +163,8 @@ export async function decideNextStep(
   messages: ChatMessage[],
   depth: Depth,
   allowedTools?: OpenAI.Chat.Completions.ChatCompletionTool[],
-  timeoutMs?: number
+  timeoutMs?: number,
+  temperature = 0.2
 ): Promise<StepDecision> {
   const client = getOpenAIClient();
   const tools = allowedTools || getAvailableTools(depth);
@@ -174,7 +175,7 @@ export async function decideNextStep(
       messages: messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length === 1 ? 'required' : tools.length > 0 ? 'auto' : undefined,
-      temperature: 0.2
+      temperature
     },
     timeoutMs ? { timeout: timeoutMs } : undefined
   );
@@ -214,7 +215,8 @@ export async function decideNextStep(
  */
 export async function* streamFinalAnswer(
   messages: ChatMessage[],
-  onUsage?: (tokens: { in: number; out: number }) => void
+  onUsage?: (tokens: { in: number; out: number }) => void,
+  temperature = 0
 ): AsyncGenerator<string, void, unknown> {
   const client = getOpenAIClient();
 
@@ -223,7 +225,7 @@ export async function* streamFinalAnswer(
     messages: messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     stream: true,
     stream_options: { include_usage: true },
-    temperature: 0.3
+    temperature
   });
 
   for await (const chunk of stream) {

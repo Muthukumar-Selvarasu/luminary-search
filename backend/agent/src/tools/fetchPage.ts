@@ -48,6 +48,17 @@ async function tavilyExtract(urlStr: string): Promise<FetchPageOutput | null> {
   };
 }
 
+/** Article region only. JSDOM on a full Wikipedia document blows the quick TTFT budget. */
+function fastArticleText(html: string): string {
+  const region =
+    html.match(/id=["']mw-content-text["'][\s\S]{0,80000}/i)?.[0] ||
+    html.match(/<article\b[\s\S]{0,80000}/i)?.[0] ||
+    html.match(/<main\b[\s\S]{0,80000}/i)?.[0] ||
+    '';
+  if (!region) return '';
+  return stripHtml(region);
+}
+
 function extractFromHtml(html: string, urlStr: string): FetchPageOutput {
   const dom = new JSDOM(html, { url: urlStr });
   const reader = new Readability(dom.window.document);
@@ -96,12 +107,14 @@ export async function fetchPage(urlStr: string): Promise<FetchPageOutput> {
 
     if (res.ok) {
       const html = await res.text();
-      const stripped = stripHtml(html);
-      const readable = stripped.length >= 80 ? stripped : extractFromHtml(html, urlStr).content;
+      const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const title = (titleMatch?.[1] || 'Untitled').replace(/\s+/g, ' ').trim() || 'Untitled';
+      const fast = fastArticleText(html);
+      // Readability is the slow path. Use it only when the article region is missing.
+      const readable = fast.length >= 200 ? fast : extractFromHtml(html, urlStr).content;
       if (readable.length >= 80) {
-        const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
         const extracted: FetchPageOutput = {
-          title: (titleMatch?.[1] || 'Untitled').replace(/\s+/g, ' ').trim() || 'Untitled',
+          title,
           content: capContent(readable),
           url: urlStr
         };
@@ -122,8 +135,31 @@ export async function fetchPage(urlStr: string): Promise<FetchPageOutput> {
   throw new Error(`Failed to fetch readable content from ${urlStr}`);
 }
 
-/** Contiguous excerpt that must appear on the live page for the grounding checker. */
-export function passageSnippet(text: string, max = 280): string {
+const QUERY_STOP = new Set([
+  'who', 'what', 'when', 'where', 'why', 'how', 'the', 'and', 'for', 'of', 'is', 'are', 'was', 'were',
+  'a', 'an', 'to', 'in', 'on', 'usa', 'united', 'states'
+]);
+
+function queryOverlap(sentence: string, query: string): number {
+  const terms = query
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 2 && !QUERY_STOP.has(w));
+  if (terms.length === 0) return 0;
+  const hay = sentence.toLowerCase();
+  let hits = 0;
+  for (const term of terms) {
+    if (hay.includes(term)) hits++;
+  }
+  return hits;
+}
+
+/**
+ * Contiguous excerpt that must appear on the live page for the grounding checker.
+ * When a query is given, prefer the sentence that actually overlaps that question
+ * so the cited passage is the one the claim rests on.
+ */
+export function passageSnippet(text: string, max = 280, query?: string): string {
   const clean = text.replace(/\s+/g, ' ').replace(/\u00a0/g, ' ').trim();
   if (!clean) return '';
   const parts = clean
@@ -134,10 +170,88 @@ export function passageSnippet(text: string, max = 280): string {
       const words = s.split(/\s+/).filter(Boolean);
       if (words.length < 12 || words.length > 45) return false;
       if (!/[a-z]/.test(s)) return false;
-      if (/cookie|subscribe|sign in|accept all|advertisement/i.test(s)) return false;
+      if (/cookie|subscribe|sign in|accept all|advertisement|\{\{|\]\]|archive-url|url-status/i.test(s)) return false;
       return true;
     });
-  const source = parts[1] || parts[0] || clean;
+  const ranked = query
+    ? parts
+        .map((s, i) => ({
+          s,
+          score: queryOverlap(s, query) * 10 + (/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/.test(s) ? 4 : 0) - i * 0.2
+        }))
+        .sort((a, b) => b.score - a.score)
+        .map((row) => row.s)
+    : parts;
+  const best = ranked[0];
+  const source =
+    query && best && queryOverlap(best, query) > 0 ? best : parts[0] || clean;
   if (source.length <= max) return source;
   return source.split(/\s+/).slice(0, 32).join(' ').trim();
+}
+
+const GENERIC_NAMES = /^(United States|White House|New York|Vice President|Supreme Court|North America)$/;
+
+function tidyReading(text: string): string {
+  return text
+    .replace(/\{\{[\s\S]*?\}\}/g, ' ')
+    .replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1')
+    .replace(/\[\[([^\]]+)\]\]/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeTokens(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9']+/g, ' ').trim();
+}
+
+/**
+ * Citation snippet plus the page window the answer may use.
+ * The snippet is a verbatim span (grounding checks it against the live page).
+ * The body is a readable window around the name or sentence that answers the query.
+ */
+export function groundedExcerpt(
+  raw: string,
+  query: string
+): { snippet: string; body: string } {
+  const clean = raw.replace(/\s+/g, ' ').replace(/\u00a0/g, ' ').trim();
+  const reading = tidyReading(clean);
+  const names = [...reading.matchAll(/\b[A-Z][a-z]+\s+[A-Z][a-z]+\b/g)].filter(
+    (m) => !GENERIC_NAMES.test(m[0])
+  );
+  const incumbentAt = reading.search(/incumbent/i);
+  const named =
+    (incumbentAt >= 0
+      ? names.find((m) => m.index >= incumbentAt && m.index - incumbentAt < 60)
+      : undefined) ?? names[0];
+
+  let snippet = passageSnippet(clean, 280, query);
+  if (named) {
+    const at = clean.indexOf(named[0]);
+    if (at >= 0) {
+      const from = clean.slice(Math.max(0, at - 40), at + 320);
+      const words = from.trim().split(/\s+/);
+      const candidate = words.slice(0, 36).join(' ');
+      const need = normalizeTokens(candidate).split(' ').filter(Boolean);
+      const hay = normalizeTokens(clean);
+      if (need.length >= 12 && hay.includes(need.slice(0, 12).join(' '))) {
+        snippet = candidate.length > 280 ? words.slice(0, 32).join(' ') : candidate;
+      }
+    }
+  }
+
+  const focus = named ? Math.max(0, (named.index ?? 0) - 180) : 0;
+  const body = (reading.slice(focus, focus + 1400) || snippet).trim();
+  return { snippet, body };
+}
+
+/** Window of fetched page text around the cited sentence, for synthesis only. */
+export function evidenceWindow(content: string, snippet: string, max = 1400): string {
+  const clean = content.replace(/\s+/g, ' ').replace(/\u00a0/g, ' ').trim();
+  if (!clean) return snippet;
+  if (clean.length <= max) return clean;
+  const anchor = snippet.slice(0, 80);
+  const idx = anchor ? clean.indexOf(anchor) : -1;
+  if (idx < 0) return clean.slice(0, max);
+  const start = Math.max(0, idx - 240);
+  return clean.slice(start, start + max).trim();
 }

@@ -145,8 +145,8 @@ try {
     ...(VERCEL_PROJECT_ID ? { VERCEL_PROJECT_ID } : {})
   };
   const output = runCapture('npx -y vercel --prod --yes', { ...vercelEnv, VERCEL_TOKEN });
-  const aliasMatch = output.match(/Aliased\s+(https:\/\/[a-zA-Z0-9\-\.]+\.vercel\.app)/i);
-  const match = output.match(/https:\/\/[a-zA-Z0-9\-\.]+\.vercel\.app/i);
+  const aliasMatch = output.match(/Aliased\s+(https:\/\/[a-zA-Z0-9.-]+\.vercel\.app)/i);
+  const match = output.match(/https:\/\/[a-zA-Z0-9.-]+\.vercel\.app/i);
   vercelUrl = aliasMatch ? aliasMatch[1] : (match ? match[0] : 'https://lumina-ui-eight.vercel.app');
   console.log(`✓ Vercel Deployment Live at: ${vercelUrl}`);
 } catch (err) {

@@ -76,6 +76,25 @@ Correct but slow, expensive, or ungrounded fails. The targets are in
 `benchmark/sla.json`, declared before your first run — [`TECHNICAL.md`](TECHNICAL.md)
 explains what each one measures and how the grounding check works.
 
+## Demo
+
+Walkthrough: [`demo/lumina-demo.webm`](demo/lumina-demo.webm) (about 50 seconds). The deployed app plays the same file at [/demo/player.html](https://lumina-ui-eight.vercel.app/demo/player.html), and `/evals` links that page.
+
+1. **Theme.** Light and Dark sit in the header. The choice is saved in the browser and applies on Ask, Evals, Graph, and Notes.
+2. **Ask.** A quick question streams an answer whose facts are copied from the fetched page, with a citation you can open.
+3. **Deep.** Switch the same thread to Deep. The model writes sub-questions for that question and the plan shows up before retrieval. The answer then uses one merged citation list.
+4. **Evals.** Open `/evals`. It renders `GET /evals/report.json` and nothing you type by hand.
+5. **Graph.** Open `/graph` for the Graphify wiki. The left nav stays mounted. Call flow, Code tree, and Force graph change only the right panel.
+6. **Notes.** Open `/notes` last. It is the showcase: which URL to open, which service talks to which, and which secrets stay on the agent.
+
+Locally, point the UI at the gateway and start all three processes:
+
+```bash
+VITE_API_URL=http://localhost:8787 npm run dev
+```
+
+Then open <http://localhost:5173>. The browser talks only to `:8787`.
+
 ## How you submit
 
 **One URL**: your deployed app, with `/` working for a stranger and `/evals` rendering the

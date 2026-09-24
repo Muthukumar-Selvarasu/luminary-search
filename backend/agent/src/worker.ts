@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { env } from './env.js';
 import { db } from './db.js';
+import { waitUntilInteractiveQuiet } from './load.js';
 import { getGridFSBucket } from './rag/gridfs.js';
 import { parsePdf, parseTextOrMarkdown, type ParseResult } from './rag/parser.js';
 import { generateEmbeddings } from './rag/embeddings.js';
@@ -79,6 +80,7 @@ async function probeVectorIndex(spaceId: string, docId: string, probeEmbedding: 
   const chunksColl = database.collection<any>('chunks');
   const maxWaitMs = 45000;
   const t0 = Date.now();
+  let pausedMs = 0;
 
   log.info({ docId, spaceId }, 'Starting read-your-write vector index probe...');
 
@@ -87,7 +89,12 @@ async function probeVectorIndex(spaceId: string, docId: string, probeEmbedding: 
     return Boolean(found);
   }
 
-  while (Date.now() - t0 < maxWaitMs) {
+  while (Date.now() - t0 - pausedMs < maxWaitMs) {
+    // An in-flight answer also searches Atlas. Wait it out so the probe does not slow it.
+    const pauseStart = Date.now();
+    await waitUntilInteractiveQuiet();
+    pausedMs += Date.now() - pauseStart;
+    if (Date.now() - t0 - pausedMs >= maxWaitMs) break;
     try {
       const results = await chunksColl
         .aggregate([
@@ -134,6 +141,10 @@ async function processJob(job: any): Promise<void> {
   const spaceId = String(payload.spaceId || job.spaceId || '');
 
   log.info({ docId, spaceId, jobId: job._id }, 'Processing document ingestion job');
+  // Searches are often fired in the same breath as the 202. Let them register
+  // before this job takes Atlas or the embedding API.
+  await new Promise((r) => setTimeout(r, 2000));
+  await waitUntilInteractiveQuiet();
 
   const doc = await docsColl.findOne({ _id: docId });
   if (!doc) {
@@ -156,6 +167,7 @@ async function processJob(job: any): Promise<void> {
   const fileBuffer = Buffer.concat(chunksBuffer);
 
   // 2. Parse file off the HTTP event loop so search/202 stay responsive during ingest.
+  await waitUntilInteractiveQuiet();
   const mimeType = String(doc.mimeType || '').toLowerCase();
   const parseResult = await parseDocument(mimeType, String(doc.title || ''), fileBuffer);
 
@@ -164,6 +176,7 @@ async function processJob(job: any): Promise<void> {
   }
 
   // 3. Generate embeddings
+  await waitUntilInteractiveQuiet();
   await docsColl.updateOne({ _id: docId }, { $set: { status: 'embedding', pct: 50 } });
 
   const texts = parseResult.chunks.map((c) => c.text);
@@ -198,6 +211,7 @@ async function processJob(job: any): Promise<void> {
   // Insert in small batches and yield so ask/search keep a Mongo connection on M0.
   const insertBatch = 25;
   for (let i = 0; i < chunkDocs.length; i += insertBatch) {
+    await waitUntilInteractiveQuiet();
     await chunksColl.insertMany(chunkDocs.slice(i, i + insertBatch));
     await new Promise((r) => setImmediate(r));
   }
@@ -257,6 +271,8 @@ export async function startWorker(): Promise<void> {
 
       const database = await db();
       const jobsColl = database.collection<any>('jobs');
+
+      await waitUntilInteractiveQuiet();
 
       const job = await jobsColl.findOneAndUpdate(
         { status: 'pending' },

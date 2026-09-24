@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && mkdir -p web/dist/evals web/dist/demo && cp backend/gateway/evals-report.json web/dist/evals/report.json && cp demo/lumina-demo.webm demo/player.html web/dist/demo/",
   "outputDirectory": "web/dist",
   "framework": "vite",
   "rewrites": [
